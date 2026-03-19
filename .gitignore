@@ -1,0 +1,39 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Electron build outputs
+/dist_electron
+/dist_electron/**
+
+# Unpacked app folder
+/win-unpacked
+/dist_electron/win-unpacked
+
+# Installer and portable artifacts
+/dist_electron/*.exe
+/dist_electron/*.zip
+/dist_electron/*.nupkg
+/dist_electron/*.blockmap
+/dist_electron/latest.yml
