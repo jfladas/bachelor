@@ -1,7 +1,9 @@
 <script setup>
-import Pet from "./components/Pet.vue";
+import ChainPet from "./components/ChainPet.vue";
+import MatterPet from "./components/MatterPet.vue";
 </script>
 
 <template>
-  <Pet />
+  <!--   <MatterPet /> -->
+  <ChainPet />
 </template>
