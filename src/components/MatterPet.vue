@@ -4,27 +4,36 @@ import { Engine, Runner, World, Bodies, Body, Constraint } from "matter-js";
 
 const { ipcRenderer } = require("electron");
 
-const BALL_RADII = [24, 30, 30, 28, 40];
+const BALL_RADII = [20, 20, 20, 20, 15]; //[24, 30, 30, 28, 40]
+const CHAIN_GAP = 0;
 const BALL_COUNT = BALL_RADII.length;
-const WALL_THICKNESS = 50;
-const FLING_SAMPLE_WINDOW_MS = 120;
-const FLING_MAX_SPEED = 35;
-const MS_PER_STEP = 1000 / 60;
-const CHAIN_GAP = 5;
+const WALL_THICKNESS = 500;
 const OUTLINE_PADDING = 10;
 const OUTLINE_SMOOTH_FACTOR = 0.25;
+const OVERLAP_PASSES = 3;
+const EDGE_WIDTH = 20;
+const MAX_BALL_SPEED = 50;
+const CONVEX_ANGLE = 70;
+const PETTING_SCALE = 0.7;
+const PETTING_LERP = 0.03;
 
 const positions = ref([]);
-const dragging = ref(false);
+const grabbing = ref(false);
+const blobArea = ref(null);
+const blobEdge = ref(null);
 
 let engine;
 let runner;
-let petBodies = [];
+let ballBodies = [];
 let chainConstraints = [];
 let walls = [];
 let animationFrameId;
-let dragSamples = [];
 let activeBody = null;
+let cursorInsideBlob = false;
+let mousePosition = { x: 0, y: 0 };
+let ballScaleFactors = [];
+
+const dev = false; // dev mode shows physics bodies and outlines for debugging
 
 const outlinePoints = computed(() => {
     if (positions.value.length < 3) {
@@ -63,7 +72,7 @@ const outlinePoints = computed(() => {
     });
 });
 
-const ringOutlinePath = computed(() => {
+const blobPath = computed(() => {
     if (outlinePoints.value.length < 3) {
         return "";
     }
@@ -95,16 +104,195 @@ const ringOutlinePath = computed(() => {
     return `${path} Z`;
 });
 
-const syncPetPositions = () => {
-    if (petBodies.length === 0) {
+const syncBallPositions = () => {
+    if (ballBodies.length === 0) {
         return;
     }
 
-    positions.value = petBodies.map((body) => ({
+    positions.value = ballBodies.map((body) => ({
         x: body.position.x - body.circleRadius,
         y: body.position.y - body.circleRadius,
         radius: body.circleRadius,
     }));
+};
+
+const clampBallVelocities = () => {
+    if (ballBodies.length === 0) {
+        return;
+    }
+
+    const maxSpeedSq = MAX_BALL_SPEED * MAX_BALL_SPEED;
+
+    ballBodies.forEach((body) => {
+        if (body.isStatic) {
+            return;
+        }
+
+        const speedSq = body.velocity.x * body.velocity.x + body.velocity.y * body.velocity.y;
+        if (speedSq <= maxSpeedSq) {
+            return;
+        }
+
+        const speed = Math.sqrt(speedSq);
+        const scale = MAX_BALL_SPEED / speed;
+        Body.setVelocity(body, {
+            x: body.velocity.x * scale,
+            y: body.velocity.y * scale,
+        });
+    });
+};
+
+const updateHoverBallScale = () => {
+    if (ballBodies.length === 0) {
+        return;
+    }
+
+    if (ballScaleFactors.length !== ballBodies.length) {
+        ballScaleFactors = ballBodies.map(() => 1);
+    }
+
+    const hoverActive = cursorInsideBlob && !grabbing.value;
+    let closestIndex = -1;
+
+    if (hoverActive) {
+        let minDistanceSq = Number.POSITIVE_INFINITY;
+        for (let i = 0; i < ballBodies.length; i += 1) {
+            const body = ballBodies[i];
+            const dx = body.position.x - mousePosition.x;
+            const dy = body.position.y - mousePosition.y;
+            const distanceSq = dx * dx + dy * dy;
+
+            if (distanceSq < minDistanceSq) {
+                minDistanceSq = distanceSq;
+                closestIndex = i;
+            }
+        }
+    }
+
+    for (let i = 0; i < ballBodies.length; i += 1) {
+        const body = ballBodies[i];
+        const currentScale = ballScaleFactors[i] || 1;
+        const targetScale = hoverActive && i === closestIndex ? PETTING_SCALE : 1;
+        const nextScale = currentScale + (targetScale - currentScale) * PETTING_LERP;
+
+        if (Math.abs(nextScale - currentScale) < 0.0001) {
+            continue;
+        }
+
+        const scaleRatio = nextScale / currentScale;
+        Body.scale(body, scaleRatio, scaleRatio);
+        ballScaleFactors[i] = nextScale;
+    }
+};
+
+const toDegrees = (radians) => (radians * 180) / Math.PI;
+
+const getOutlineInteriorAngle = (prev, curr, next) => {
+    const v1x = prev.x - curr.x;
+    const v1y = prev.y - curr.y;
+    const v2x = next.x - curr.x;
+    const v2y = next.y - curr.y;
+
+    const mag1 = Math.hypot(v1x, v1y);
+    const mag2 = Math.hypot(v2x, v2y);
+    if (mag1 <= 0.0001 || mag2 <= 0.0001) {
+        return 180;
+    }
+
+    const dot = v1x * v2x + v1y * v2y;
+    const cosTheta = Math.min(1, Math.max(-1, dot / (mag1 * mag2)));
+    return toDegrees(Math.acos(cosTheta));
+};
+
+const isBodyTouchingWall = (body) => {
+    const radius = body.circleRadius;
+    const minX = radius;
+    const maxX = window.innerWidth - radius;
+    const minY = radius;
+    const maxY = window.innerHeight - radius;
+
+    return (
+        body.position.x <= minX ||
+        body.position.x >= maxX ||
+        body.position.y <= minY ||
+        body.position.y >= maxY
+    );
+};
+
+const isAnyBallTouchingWall = () => {
+    if (ballBodies.length === 0) {
+        return false;
+    }
+
+    return ballBodies.some((body) => isBodyTouchingWall(body));
+};
+
+const checkConvexAngle = () => {
+    if (!grabbing.value || !activeBody || outlinePoints.value.length < 3) {
+        return;
+    }
+
+    if (!isAnyBallTouchingWall()) {
+        return;
+    }
+
+    const points = outlinePoints.value;
+    const count = points.length;
+
+    for (let i = 0; i < count; i += 1) {
+        const prev = points[(i - 1 + count) % count];
+        const curr = points[i];
+        const next = points[(i + 1) % count];
+        const interiorAngle = getOutlineInteriorAngle(prev, curr, next);
+
+        if (interiorAngle < CONVEX_ANGLE) {
+            stopDrag();
+            return;
+        }
+    }
+};
+
+const separateOverlappingBalls = () => {
+    if (ballBodies.length < 2) {
+        return;
+    }
+
+    for (let pass = 0; pass < OVERLAP_PASSES; pass += 1) {
+        for (let i = 0; i < ballBodies.length; i += 1) {
+            for (let j = i + 1; j < ballBodies.length; j += 1) {
+                const bodyA = ballBodies[i];
+                const bodyB = ballBodies[j];
+                const dx = bodyB.position.x - bodyA.position.x;
+                const dy = bodyB.position.y - bodyA.position.y;
+                const minDistance = bodyA.circleRadius + bodyB.circleRadius;
+                const distance = Math.hypot(dx, dy);
+
+                if (distance >= minDistance) {
+                    continue;
+                }
+
+                const nx = distance > 0.0001 ? dx / distance : 1;
+                const ny = distance > 0.0001 ? dy / distance : 0;
+                const overlap = minDistance - Math.max(distance, 0.0001);
+                const shiftX = nx * (overlap / 2);
+                const shiftY = ny * (overlap / 2);
+
+                if (!bodyA.isStatic) {
+                    Body.setPosition(bodyA, {
+                        x: bodyA.position.x - shiftX,
+                        y: bodyA.position.y - shiftY,
+                    });
+                }
+
+                if (!bodyB.isStatic) {
+                    Body.setPosition(bodyB, {
+                        x: bodyB.position.x + shiftX,
+                        y: bodyB.position.y + shiftY,
+                    });
+                }
+            }
+        }
+    }
 };
 
 const createBallBodies = (centerX, centerY) => {
@@ -116,10 +304,9 @@ const createBallBodies = (centerX, centerY) => {
         const radius = BALL_RADII[i];
         bodies.push(
             Bodies.circle(centerX + Math.cos(angle) * spread, centerY + Math.sin(angle) * spread, radius, {
-                restitution: 1,
-                friction: 0.001,
+                restitution: 0.8,
+                friction: 0.1,
                 frictionAir: 0.01,
-                slop: 0,
             })
         );
     }
@@ -138,8 +325,7 @@ const createChainConstraints = (bodies) => {
                 bodyA: bodies[i],
                 bodyB: bodies[nextIndex],
                 length,
-                stiffness: 0,
-                damping: 1,
+                stiffness: 1,
             })
         );
     }
@@ -181,34 +367,58 @@ const updateDragPosition = (event) => {
     const y = Math.min(Math.max(event.clientY, radius), window.innerHeight - radius);
 
     Body.setPosition(activeBody, { x, y });
-    Body.setVelocity(activeBody, { x: 0, y: 0 });
 
-    const now = performance.now();
-    dragSamples.push({ x, y, t: now });
-    dragSamples = dragSamples.filter((sample) => sample.t >= now - FLING_SAMPLE_WINDOW_MS);
-
-    syncPetPositions();
+    separateOverlappingBalls();
+    syncBallPositions();
+    checkConvexAngle();
 };
 
-const startDrag = (event, index) => {
-    if (!petBodies[index]) {
+const beginDrag = (event, body) => {
+    if (event.button !== 0 || !body) {
         return;
     }
 
-    activeBody = petBodies[index];
+    activeBody = body;
+    Body.setStatic(activeBody, true);
+    grabbing.value = true;
+    updateDragPosition(event);
+};
 
-    if (activeBody) {
-        Body.setStatic(activeBody, true);
-        Body.setVelocity(activeBody, { x: 0, y: 0 });
+const findClosestBall = (x, y) => {
+    if (ballBodies.length === 0) {
+        return null;
     }
 
-    dragging.value = true;
-    dragSamples = [];
+    let closestBody = ballBodies[0];
+    let minDistanceSq = Number.POSITIVE_INFINITY;
+
+    ballBodies.forEach((body) => {
+        const dx = body.position.x - x;
+        const dy = body.position.y - y;
+        const distanceSq = dx * dx + dy * dy;
+
+        if (distanceSq < minDistanceSq) {
+            minDistanceSq = distanceSq;
+            closestBody = body;
+        }
+    });
+
+    return closestBody;
+};
+
+const startDrag = (event) => {
+    const closestBody = findClosestBall(event.clientX, event.clientY);
+    if (event.button !== 0 || !closestBody) {
+        return;
+    }
+    activeBody = closestBody;
+    Body.setStatic(activeBody, true);
+    grabbing.value = true;
     updateDragPosition(event);
 };
 
 const onDrag = (event) => {
-    if (!dragging.value) {
+    if (!grabbing.value) {
         return;
     }
 
@@ -216,48 +426,67 @@ const onDrag = (event) => {
 };
 
 const stopDrag = () => {
-    if (!dragging.value) {
+    if (!grabbing.value) {
         return;
     }
 
-    if (activeBody) {
-        let flingVelocity = { x: 0, y: 0 };
-
-        if (dragSamples.length >= 2) {
-            const firstSample = dragSamples[0];
-            const lastSample = dragSamples[dragSamples.length - 1];
-            const dtMs = Math.max(lastSample.t - firstSample.t, 1);
-            const velocityX = ((lastSample.x - firstSample.x) / dtMs) * MS_PER_STEP;
-            const velocityY = ((lastSample.y - firstSample.y) / dtMs) * MS_PER_STEP;
-
-            flingVelocity = {
-                x: Math.max(Math.min(velocityX, FLING_MAX_SPEED), -FLING_MAX_SPEED),
-                y: Math.max(Math.min(velocityY, FLING_MAX_SPEED), -FLING_MAX_SPEED),
-            };
-        }
-
-        Body.setStatic(activeBody, false);
-        Body.setVelocity(activeBody, flingVelocity);
-    }
-
+    Body.setStatic(activeBody, false);
     activeBody = null;
-    dragging.value = false;
-    dragSamples = [];
+    grabbing.value = false;
 };
 
-const onMouseOver = (event) => {
-    if (event.target.closest(".pet")) {
-        ipcRenderer.send("set-ignore-mouse-events", false);
-    } else {
-        ipcRenderer.send("set-ignore-mouse-events", true);
+const isPointInBlob = (blob, x, y, mode) => {
+    if (!blob || !blob.ownerSVGElement) {
+        return false;
+    }
+
+    const svg = blob.ownerSVGElement;
+    const svgPoint = svg.createSVGPoint();
+    svgPoint.x = x;
+    svgPoint.y = y;
+
+    const ctm = blob.getScreenCTM();
+    if (!ctm) {
+        return false;
+    }
+
+    const localPoint = svgPoint.matrixTransform(ctm.inverse());
+
+    if (mode === "fill" && typeof blob.isPointInFill === "function") {
+        return blob.isPointInFill(localPoint);
+    }
+
+    if (mode === "stroke" && typeof blob.isPointInStroke === "function") {
+        return blob.isPointInStroke(localPoint);
+    }
+
+    return false;
+};
+
+const updateHoverState = () => {
+    const x = mousePosition.x;
+    const y = mousePosition.y;
+    const insideBlobFill = isPointInBlob(blobArea.value, x, y, "fill");
+    const insideBlobBand = isPointInBlob(blobEdge.value, x, y, "stroke");
+
+    cursorInsideBlob = insideBlobFill || insideBlobBand;
+    ipcRenderer.send("set-ignore-mouse-events", !cursorInsideBlob);
+};
+
+const onMouseMove = (event) => {
+    mousePosition = { x: event.clientX, y: event.clientY };
+    updateHoverState();
+
+    if (grabbing.value) {
+        onDrag(event);
     }
 };
 
 const onResize = () => {
     rebuildWalls();
 
-    if (petBodies.length > 0) {
-        petBodies.forEach((body) => {
+    if (ballBodies.length > 0) {
+        ballBodies.forEach((body) => {
             const radius = body.circleRadius;
             const x = Math.min(Math.max(body.position.x, radius), window.innerWidth - radius);
             const y = Math.min(Math.max(body.position.y, radius), window.innerHeight - radius);
@@ -266,12 +495,17 @@ const onResize = () => {
             Body.setVelocity(body, { x: 0, y: 0 });
         });
 
-        syncPetPositions();
+        separateOverlappingBalls();
+        syncBallPositions();
     }
 };
 
 const animate = () => {
-    syncPetPositions();
+    updateHoverBallScale();
+    separateOverlappingBalls();
+    clampBallVelocities();
+    syncBallPositions();
+    checkConvexAngle();
     animationFrameId = window.requestAnimationFrame(animate);
 };
 
@@ -283,33 +517,32 @@ onMounted(() => {
 
     const centerX = window.innerWidth / 2;
     const centerY = window.innerHeight / 2;
-    petBodies = createBallBodies(centerX, centerY);
-    chainConstraints = createChainConstraints(petBodies);
-    positions.value = petBodies.map((body) => ({
+    ballBodies = createBallBodies(centerX, centerY);
+    ballScaleFactors = ballBodies.map(() => 1);
+    chainConstraints = createChainConstraints(ballBodies);
+    positions.value = ballBodies.map((body) => ({
         x: body.position.x - body.circleRadius,
         y: body.position.y - body.circleRadius,
         radius: body.circleRadius,
     }));
 
     walls = createWalls(window.innerWidth, window.innerHeight);
-    World.add(engine.world, [...petBodies, ...chainConstraints, ...walls]);
+    World.add(engine.world, [...ballBodies, ...chainConstraints, ...walls]);
 
     runner = Runner.create();
     Runner.run(runner, engine);
 
-    window.addEventListener("mousemove", onDrag);
+    window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", stopDrag);
     window.addEventListener("resize", onResize);
-    document.addEventListener("mouseover", onMouseOver);
 
     animate();
 });
 
 onBeforeUnmount(() => {
-    window.removeEventListener("mousemove", onDrag);
+    window.removeEventListener("mousemove", onMouseMove);
     window.removeEventListener("mouseup", stopDrag);
     window.removeEventListener("resize", onResize);
-    document.removeEventListener("mouseover", onMouseOver);
 
     if (animationFrameId) {
         window.cancelAnimationFrame(animationFrameId);
@@ -325,17 +558,25 @@ onBeforeUnmount(() => {
     }
 
     activeBody = null;
-    petBodies = [];
+    cursorInsideBlob = false;
+    mousePosition = { x: 0, y: 0 };
+    ballScaleFactors = [];
+    ballBodies = [];
     chainConstraints = [];
     positions.value = [];
 });
 </script>
 
 <template>
-    <svg class="chain-overlay" aria-hidden="true">
-        <path :d="ringOutlinePath" class="chain-outline" />
+    <svg class="blob-hit-overlay" aria-hidden="true">
+        <path ref="blobArea" class="blob-area" :class="{ grabbing, dev }" :d="blobPath" @mousedown="startDrag" />
+        <path ref="blobEdge" class="blob-edge" :class="{ dev }" :d="blobPath"
+            :style="{ strokeWidth: `${EDGE_WIDTH}px` }" @mousedown="startDrag" />
+    </svg>
 
-        <circle v-for="(point, index) in outlinePoints" :key="`outline-point-${index}`" class="chain-outline-point"
+    <svg v-if="dev" class="overlay" aria-hidden="true">
+
+        <circle v-for="(point, index) in outlinePoints" :key="`outline-point-${index}`" class="outline-point"
             :cx="point.x" :cy="point.y" r="3.5" />
 
         <line v-for="(ballPosition, index) in positions" :key="`chain-${index}`"
@@ -344,16 +585,16 @@ onBeforeUnmount(() => {
             :y2="positions[(index + 1) % positions.length]?.y + positions[(index + 1) % positions.length]?.radius" />
     </svg>
 
-    <div v-for="(ballPosition, index) in positions" :key="index" class="pet" :style="{
+    <div v-if="dev" v-for="(ballPosition, index) in positions" :key="index" class="ball" :style="{
             left: `${ballPosition.x}px`,
             top: `${ballPosition.y}px`,
             width: `${ballPosition.radius * 2}px`,
             height: `${ballPosition.radius * 2}px`
-        }" :class="{ dragging }" @mousedown="startDrag($event, index)" />
+        }" />
 </template>
 
 <style scoped>
-.chain-overlay {
+.blob-hit-overlay {
     position: fixed;
     inset: 0;
     width: 100%;
@@ -361,35 +602,56 @@ onBeforeUnmount(() => {
     pointer-events: none;
 }
 
-.chain-overlay line {
+.blob-area {
+    cursor: grab;
+    fill: black;
+    stroke: none;
+    pointer-events: all;
+}
+
+.blob-edge {
+    cursor: grab;
+    fill: none;
+    stroke: none;
+    pointer-events: stroke;
+}
+
+.blob-area.grabbing {
+    cursor: grabbing;
+}
+
+.overlay {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.overlay line {
     stroke: aqua;
     stroke-width: 1;
     stroke-linecap: round;
 }
 
-.chain-outline {
-    stroke: aqua;
-    stroke-width: 1;
-    stroke-linejoin: round;
-    stroke-linecap: round;
-}
-
-.chain-outline-point {
-    fill: rgba(255, 255, 255, 0.1);
+.outline-point {
     stroke: aqua;
     stroke-width: 1;
 }
 
-.pet {
+.ball {
     position: absolute;
     border-radius: 50%;
     background: radial-gradient(circle at 30% 30%, #88fff1 0%, #3da8e2 50%, #4408ab 100%);
-    cursor: grab;
-    user-select: none;
-    -webkit-app-region: no-drag;
+    pointer-events: none;
 }
 
-.pet.dragging {
-    cursor: grabbing;
+.blob-area.dev {
+    stroke: aqua;
+    stroke-width: 1;
+}
+
+.blob-edge.dev {
+    stroke: rgba(114, 114, 114, 0.3);
 }
 </style>

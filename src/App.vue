@@ -4,6 +4,6 @@ import MatterPet from "./components/MatterPet.vue";
 </script>
 
 <template>
-  <!--   <MatterPet /> -->
-  <ChainPet />
+  <MatterPet />
+  <!-- <ChainPet /> -->
 </template>

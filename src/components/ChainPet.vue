@@ -11,16 +11,15 @@ const LINK_GAP_X = 20;
 const LINK_GAP_Y = 130;
 const WALL_THICKNESS = 50;
 const CURSOR_IMPACT_RADIUS = 5;
-const CURSOR_OFFSCREEN = -9999;
-const OUTER_GRAB_BAND_WIDTH = 50;
+const BLOB_EDGE_WIDTH = 50;
 
 const links = ref([]);
-const dragging = ref(false);
-const blobHitAreaRef = ref(null);
-const blobHitBandRef = ref(null);
-const cursorImpactVisual = ref({
-    x: CURSOR_OFFSCREEN,
-    y: CURSOR_OFFSCREEN,
+const grabbing = ref(false);
+const blobArea = ref(null);
+const blobEdge = ref(null);
+const cursor = ref({
+    x: 0,
+    y: 0,
     visible: false,
 });
 
@@ -34,7 +33,7 @@ let activeBody = null;
 let cursorImpactBody;
 let cursorActive = false;
 let cursorInsideBlob = false;
-let mousePosition = { x: CURSOR_OFFSCREEN, y: CURSOR_OFFSCREEN };
+let mousePosition = { x: 0, y: 0 };
 let animationFrameId;
 
 const getConstraintPoint = (body, point) => {
@@ -116,12 +115,12 @@ const blobHitPath = computed(() => {
 });
 
 const blobCursorClass = computed(() => {
-    if (dragging.value) {
-        return "is-grabbing";
+    if (grabbing.value) {
+        return "grabbing";
     }
 
     if (cursorActive) {
-        return "is-grab";
+        return "grab";
     }
 
     return "";
@@ -220,7 +219,7 @@ const beginDrag = (event, body) => {
     activeBody = body;
     Body.setStatic(activeBody, true);
     Body.setVelocity(activeBody, { x: 0, y: 0 });
-    dragging.value = true;
+    grabbing.value = true;
     updateDragPosition(event);
 };
 
@@ -270,7 +269,7 @@ const startBlobDrag = (event) => {
 };
 
 const onDrag = (event) => {
-    if (!dragging.value) {
+    if (!grabbing.value) {
         return;
     }
 
@@ -278,7 +277,7 @@ const onDrag = (event) => {
 };
 
 const stopDrag = () => {
-    if (!dragging.value) {
+    if (!grabbing.value) {
         return;
     }
 
@@ -287,7 +286,7 @@ const stopDrag = () => {
     }
 
     activeBody = null;
-    dragging.value = false;
+    grabbing.value = false;
 };
 
 const updateCursorBody = () => {
@@ -295,11 +294,11 @@ const updateCursorBody = () => {
         return;
     }
 
-    if (!cursorActive || cursorInsideBlob || dragging.value) {
-        Body.setPosition(cursorImpactBody, { x: CURSOR_OFFSCREEN, y: CURSOR_OFFSCREEN });
-        cursorImpactVisual.value = {
-            x: CURSOR_OFFSCREEN,
-            y: CURSOR_OFFSCREEN,
+    if (!cursorActive || cursorInsideBlob || grabbing.value) {
+        Body.setPosition(cursorImpactBody, { x: 0, y: 0 });
+        cursor.value = {
+            x: 0,
+            y: 0,
             visible: false,
         };
         return;
@@ -308,7 +307,7 @@ const updateCursorBody = () => {
     const x = Math.min(Math.max(mousePosition.x, CURSOR_IMPACT_RADIUS), window.innerWidth - CURSOR_IMPACT_RADIUS);
     const y = Math.min(Math.max(mousePosition.y, CURSOR_IMPACT_RADIUS), window.innerHeight - CURSOR_IMPACT_RADIUS);
     Body.setPosition(cursorImpactBody, { x, y });
-    cursorImpactVisual.value = {
+    cursor.value = {
         x,
         y,
         visible: true,
@@ -345,9 +344,9 @@ const isPointInSvgPath = (pathElement, x, y, mode) => {
 
 const updateHoverState = (x, y) => {
     const element = document.elementFromPoint(x, y);
-    const insideBlobFill = isPointInSvgPath(blobHitAreaRef.value, x, y, "fill");
-    const insideBlobBand = isPointInSvgPath(blobHitBandRef.value, x, y, "stroke");
-    const onLink = Boolean(element?.closest(".matter-pet-link"));
+    const insideBlobFill = isPointInSvgPath(blobArea.value, x, y, "fill");
+    const insideBlobBand = isPointInSvgPath(blobEdge.value, x, y, "stroke");
+    const onLink = Boolean(element?.closest(".link"));
 
     const insideBlob = insideBlobFill;
     const onNearGrabArea = insideBlobBand || onLink;
@@ -361,7 +360,7 @@ const onMouseMove = (event) => {
     mousePosition = { x: event.clientX, y: event.clientY };
     updateHoverState(event.clientX, event.clientY);
 
-    if (dragging.value) {
+    if (grabbing.value) {
         onDrag(event);
     }
 
@@ -420,7 +419,7 @@ onMounted(() => {
 
     shapeSprings = createShapeSprings(rope.bodies);
 
-    cursorImpactBody = Bodies.circle(CURSOR_OFFSCREEN, CURSOR_OFFSCREEN, CURSOR_IMPACT_RADIUS, {
+    cursorImpactBody = Bodies.circle(0, 0, CURSOR_IMPACT_RADIUS, {
         isStatic: true,
         friction: 0,
         frictionAir: 0,
@@ -468,40 +467,39 @@ onBeforeUnmount(() => {
     cursorImpactBody = null;
     cursorActive = false;
     cursorInsideBlob = false;
-    mousePosition = { x: CURSOR_OFFSCREEN, y: CURSOR_OFFSCREEN };
+    mousePosition = { x: 0, y: 0 };
     links.value = [];
 });
 </script>
 
 <template>
-    <svg class="blob-hit-overlay" aria-hidden="true">
-        <path ref="blobHitAreaRef" class="blob-hit-area" :class="blobCursorClass" :d="blobHitPath"
-            @mousedown="startBlobDrag" />
-        <path ref="blobHitBandRef" class="blob-hit-band" :class="blobCursorClass" :d="blobHitPath"
-            :style="{ strokeWidth: `${OUTER_GRAB_BAND_WIDTH}px` }" @mousedown="startBlobDrag" />
+    <svg class="blob" aria-hidden="true">
+        <path ref="blobArea" class="blob-area" :class="blobCursorClass" :d="blobHitPath" @mousedown="startBlobDrag" />
+        <path ref="blobEdge" class="blob-edge" :class="blobCursorClass" :d="blobHitPath"
+            :style="{ strokeWidth: `${BLOB_EDGE_WIDTH}px` }" @mousedown="startBlobDrag" />
     </svg>
 
-    <svg class="matter-springs-overlay" aria-hidden="true">
-        <line v-for="segment in springSegments" :key="segment.id" class="matter-spring-line" :x1="segment.x1"
-            :y1="segment.y1" :x2="segment.x2" :y2="segment.y2" />
+    <svg class="springs" aria-hidden="true">
+        <line v-for="segment in springSegments" :key="segment.id" class="spring" :x1="segment.x1" :y1="segment.y1"
+            :x2="segment.x2" :y2="segment.y2" />
     </svg>
 
-    <div v-if="cursorImpactVisual.visible" class="cursor-impact-visual" :style="{
-            left: `${cursorImpactVisual.x - CURSOR_IMPACT_RADIUS}px`,
-            top: `${cursorImpactVisual.y - CURSOR_IMPACT_RADIUS}px`,
+    <div v-if="cursor.visible" class="cursor" :style="{
+            left: `${cursor.x - CURSOR_IMPACT_RADIUS}px`,
+            top: `${cursor.y - CURSOR_IMPACT_RADIUS}px`,
             width: `${CURSOR_IMPACT_RADIUS * 2}px`,
             height: `${CURSOR_IMPACT_RADIUS * 2}px`
         }" aria-hidden="true" />
 
-    <div v-for="(link, index) in links" :key="index" class="matter-pet-link" :style="{
+    <div v-for="(link, index) in links" :key="index" class="link" :style="{
             left: `${link.x}px`,
             top: `${link.y}px`,
             transform: `rotate(${link.angle}rad)`
-        }" :class="{ dragging }" @mousedown="startDrag($event, index)" />
+        }" :class="{ grabbing }" @mousedown="startDrag($event, index)" />
 </template>
 
 <style scoped>
-.blob-hit-overlay {
+.blob {
     position: fixed;
     inset: 0;
     width: 100%;
@@ -509,28 +507,28 @@ onBeforeUnmount(() => {
     pointer-events: none;
 }
 
-.blob-hit-area {
+.blob-area {
     fill: rgba(0, 0, 0, 0.35);
     pointer-events: all;
 }
 
-.blob-hit-band {
+.blob-edge {
     fill: none;
     stroke: rgba(255, 255, 255, 0.1);
     pointer-events: stroke;
 }
 
-.blob-hit-area.is-grab,
-.blob-hit-band.is-grab {
+.blob-area.grab,
+.blob-edge.grab {
     cursor: grab;
 }
 
-.blob-hit-area.is-grabbing,
-.blob-hit-band.is-grabbing {
+.blob-area.grabbing,
+.blob-edge.grabbing {
     cursor: grabbing;
 }
 
-.matter-springs-overlay {
+.springs {
     position: fixed;
     inset: 0;
     width: 100%;
@@ -538,20 +536,20 @@ onBeforeUnmount(() => {
     pointer-events: none;
 }
 
-.matter-spring-line {
+.spring {
     stroke: rgba(255, 255, 255, 0.1);
     stroke-width: 1;
     stroke-linecap: round;
 }
 
-.cursor-impact-visual {
+.cursor {
     position: absolute;
     border-radius: 50%;
     border: 1px solid aqua;
     pointer-events: none;
 }
 
-.matter-pet-link {
+.link {
     position: absolute;
     width: 50px;
     height: 20px;
@@ -564,7 +562,7 @@ onBeforeUnmount(() => {
     -webkit-app-region: no-drag;
 }
 
-.matter-pet-link.dragging {
+.link.grabbing {
     cursor: grabbing;
 }
 </style>
