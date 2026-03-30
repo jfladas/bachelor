@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { Engine, Runner, World, Bodies, Body, Constraint } from "matter-js";
+import faceImage from "../assets/face.png";
 
 const { ipcRenderer } = require("electron");
 
@@ -16,11 +17,14 @@ const MAX_BALL_SPEED = 50;
 const CONVEX_ANGLE = 70;
 const PETTING_SCALE = 0.7;
 const PETTING_LERP = 0.03;
+const CENTER_LERP_MIN = 0.1;
+const CENTER_LERP_MAX = 0.7;
 
 const positions = ref([]);
 const grabbing = ref(false);
 const blobArea = ref(null);
 const blobEdge = ref(null);
+const smoothBlobCenter = ref(null);
 
 let engine;
 let runner;
@@ -104,6 +108,25 @@ const blobPath = computed(() => {
     return `${path} Z`;
 });
 
+const blobCenter = computed(() => {
+    if (positions.value.length === 0) {
+        return null;
+    }
+
+    const totals = positions.value.reduce(
+        (acc, ball) => ({
+            x: acc.x + ball.x + ball.radius,
+            y: acc.y + ball.y + ball.radius,
+        }),
+        { x: 0, y: 0 }
+    );
+
+    return {
+        x: totals.x / positions.value.length,
+        y: totals.y / positions.value.length,
+    };
+});
+
 const syncBallPositions = () => {
     if (ballBodies.length === 0) {
         return;
@@ -115,6 +138,46 @@ const syncBallPositions = () => {
         radius: body.circleRadius,
     }));
 };
+
+const updatesmoothBlobCenter = () => {
+    if (!blobCenter.value) {
+        smoothBlobCenter.value = null;
+        return;
+    }
+
+    if (!smoothBlobCenter.value) {
+        smoothBlobCenter.value = {
+            x: blobCenter.value.x,
+            y: blobCenter.value.y,
+        };
+        return;
+    }
+
+    const dx = blobCenter.value.x - smoothBlobCenter.value.x;
+    const dy = blobCenter.value.y - smoothBlobCenter.value.y;
+    const distance = Math.hypot(dx, dy);
+    const blend = Math.min(1, distance / 100);
+    const lerp = CENTER_LERP_MIN + (CENTER_LERP_MAX - CENTER_LERP_MIN) * blend;
+
+    smoothBlobCenter.value = {
+        x: smoothBlobCenter.value.x + dx * lerp,
+        y: smoothBlobCenter.value.y + dy * lerp,
+    };
+};
+
+const faceStyle = computed(() => {
+    if (!smoothBlobCenter.value) {
+        return {
+            left: "-9999px",
+            top: "-9999px",
+        };
+    }
+
+    return {
+        left: `${smoothBlobCenter.value.x}px`,
+        top: `${smoothBlobCenter.value.y}px`,
+    };
+});
 
 const clampBallVelocities = () => {
     if (ballBodies.length === 0) {
@@ -505,6 +568,7 @@ const animate = () => {
     separateOverlappingBalls();
     clampBallVelocities();
     syncBallPositions();
+    updatesmoothBlobCenter();
     checkConvexAngle();
     animationFrameId = window.requestAnimationFrame(animate);
 };
@@ -525,6 +589,7 @@ onMounted(() => {
         y: body.position.y - body.circleRadius,
         radius: body.circleRadius,
     }));
+    updatesmoothBlobCenter();
 
     walls = createWalls(window.innerWidth, window.innerHeight);
     World.add(engine.world, [...ballBodies, ...chainConstraints, ...walls]);
@@ -564,6 +629,7 @@ onBeforeUnmount(() => {
     ballBodies = [];
     chainConstraints = [];
     positions.value = [];
+    smoothBlobCenter.value = null;
 });
 </script>
 
@@ -573,6 +639,8 @@ onBeforeUnmount(() => {
         <path ref="blobEdge" class="blob-edge" :class="{ dev }" :d="blobPath"
             :style="{ strokeWidth: `${EDGE_WIDTH}px` }" @mousedown="startDrag" />
     </svg>
+
+    <img v-if="!dev" class="blob-face" :src="faceImage" alt="" aria-hidden="true" :style="faceStyle" />
 
     <svg v-if="dev" class="overlay" aria-hidden="true">
 
@@ -604,7 +672,7 @@ onBeforeUnmount(() => {
 
 .blob-area {
     cursor: grab;
-    fill: black;
+    fill: rgb(140, 164, 242);
     stroke: none;
     pointer-events: all;
 }
@@ -628,6 +696,15 @@ onBeforeUnmount(() => {
     pointer-events: none;
 }
 
+.blob-face {
+    position: fixed;
+    width: 60px;
+    height: auto;
+    transform: translate(-50%, -100%);
+    pointer-events: none;
+    z-index: 2;
+}
+
 .overlay line {
     stroke: aqua;
     stroke-width: 1;
@@ -647,6 +724,7 @@ onBeforeUnmount(() => {
 }
 
 .blob-area.dev {
+    fill: black;
     stroke: aqua;
     stroke-width: 1;
 }
