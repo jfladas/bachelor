@@ -3,9 +3,26 @@ import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { Engine, Runner, World, Bodies, Body, Constraint } from "matter-js";
 import faceImage from "../assets/face.png";
 
+// placeholder props
+const props = defineProps({
+    onboardingData: {
+        type: Object,
+        default: () => ({
+            hue: 220,
+            assignedHue: 220,
+            symmetry: 0.5,
+            variability: 0.5,
+            activity: 0.5,
+            reaction: "sparkles",
+        }),
+    },
+});
+
 const { ipcRenderer } = require("electron");
 
-const BALL_RADII = [20, 20, 20, 20, 15]; //[24, 30, 30, 28, 40]
+//const BALL_RADII = [20, 15, 15, 20, 25];
+//const BALL_RADII = [20, 20, 20, 20, 25];
+const BALL_RADII = [20, 20, 20, 20, 20];
 const CHAIN_GAP = 0;
 const BALL_COUNT = BALL_RADII.length;
 const WALL_THICKNESS = 500;
@@ -14,7 +31,7 @@ const OUTLINE_SMOOTH_FACTOR = 0.25;
 const OVERLAP_PASSES = 3;
 const EDGE_WIDTH = 20;
 const MAX_BALL_SPEED = 50;
-const CONVEX_ANGLE = 70;
+const CONVEX_ANGLE = 60;
 const PETTING_SCALE = 0.7;
 const PETTING_LERP = 0.03;
 const CENTER_LERP_MIN = 0.1;
@@ -38,6 +55,61 @@ let mousePosition = { x: 0, y: 0 };
 let ballScaleFactors = [];
 
 const dev = false; // dev mode shows physics bodies and outlines for debugging
+
+const reactionOptions = ["sparkles", "flowers", "hearts"];
+
+const clampHue = (value, fallback = 220) => {
+    const numericHue = Number(value);
+    if (!Number.isFinite(numericHue)) {
+        return fallback;
+    }
+
+    return ((Math.round(numericHue) % 360) + 360) % 360;
+};
+
+const clampUnit = (value, fallback = 0.5) => {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) {
+        return fallback;
+    }
+
+    return Math.min(1, Math.max(0, numericValue));
+};
+
+const hue = computed(() => {
+    return clampHue(props.onboardingData?.hue, 220);
+});
+
+const assignedHue = computed(() => clampHue(props.onboardingData?.assignedHue, hue.value));
+
+const symmetry = computed(() => clampUnit(props.onboardingData?.symmetry, 0.5));
+
+const variability = computed(() => clampUnit(props.onboardingData?.variability, 0.5));
+
+const activity = computed(() => clampUnit(props.onboardingData?.activity, 0.5));
+
+const reaction = computed(() => {
+    const reaction = props.onboardingData?.reaction;
+    if (typeof reaction === "string" && reactionOptions.includes(reaction)) {
+        return reaction;
+    }
+
+    return "sparkles";
+});
+
+const hueVariables = computed(() => ({
+    "--hue": `${hue.value}deg`,
+    "--white": "oklch(95% 0.01 var(--hue))",
+    "--shadow": "oklch(20% 0.02 var(--hue) / 0.5)",
+    "--primary": "oklch(71% 0.16 var(--hue))",
+    "--lighter": "oklch(80% 0.1 var(--hue))",
+    "--darker": "oklch(63% 0.14 var(--hue))",
+    "--text-strong": "oklch(20% 0.04 var(--hue))",
+    "--text": "oklch(40% 0.02 var(--hue))",
+    "--text-muted": "oklch(80% 0.02 var(--hue))",
+    "--secondary": "oklch(90% 0.02 var(--hue))",
+    "--secondary-hover": "oklch(85% 0.03 var(--hue))",
+}));
 
 const outlinePoints = computed(() => {
     if (positions.value.length < 3) {
@@ -602,6 +674,9 @@ onMounted(() => {
     window.addEventListener("resize", onResize);
 
     animate();
+
+    console.log("hue:", hue.value);
+    console.log("assignedHue:", assignedHue.value);
 });
 
 onBeforeUnmount(() => {
@@ -634,34 +709,41 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <svg class="blob-hit-overlay" aria-hidden="true">
-        <path ref="blobArea" class="blob-area" :class="{ grabbing, dev }" :d="blobPath" @mousedown="startDrag" />
-        <path ref="blobEdge" class="blob-edge" :class="{ dev }" :d="blobPath"
-            :style="{ strokeWidth: `${EDGE_WIDTH}px` }" @mousedown="startDrag" />
-    </svg>
+    <div class="root" :style="hueVariables">
+        <svg class="blob-hit-overlay" aria-hidden="true">
+            <path ref="blobArea" class="blob-area" :class="{ grabbing, dev }" :d="blobPath" @mousedown="startDrag" />
+            <path ref="blobEdge" class="blob-edge" :class="{ dev }" :d="blobPath"
+                :style="{ strokeWidth: `${EDGE_WIDTH}px` }" @mousedown="startDrag" />
+        </svg>
 
-    <img v-if="!dev" class="blob-face" :src="faceImage" alt="" aria-hidden="true" :style="faceStyle" />
+        <img v-if="!dev" class="blob-face" :src="faceImage" alt="" aria-hidden="true" :style="faceStyle" />
 
-    <svg v-if="dev" class="overlay" aria-hidden="true">
+        <svg v-if="dev" class="overlay" aria-hidden="true">
 
-        <circle v-for="(point, index) in outlinePoints" :key="`outline-point-${index}`" class="outline-point"
-            :cx="point.x" :cy="point.y" r="3.5" />
+            <circle v-for="(point, index) in outlinePoints" :key="`outline-point-${index}`" class="outline-point"
+                :cx="point.x" :cy="point.y" r="3.5" />
 
-        <line v-for="(ballPosition, index) in positions" :key="`chain-${index}`"
-            :x1="ballPosition.x + ballPosition.radius" :y1="ballPosition.y + ballPosition.radius"
-            :x2="positions[(index + 1) % positions.length]?.x + positions[(index + 1) % positions.length]?.radius"
-            :y2="positions[(index + 1) % positions.length]?.y + positions[(index + 1) % positions.length]?.radius" />
-    </svg>
+            <line v-for="(ballPosition, index) in positions" :key="`chain-${index}`"
+                :x1="ballPosition.x + ballPosition.radius" :y1="ballPosition.y + ballPosition.radius"
+                :x2="positions[(index + 1) % positions.length]?.x + positions[(index + 1) % positions.length]?.radius"
+                :y2="positions[(index + 1) % positions.length]?.y + positions[(index + 1) % positions.length]?.radius" />
+        </svg>
 
-    <div v-if="dev" v-for="(ballPosition, index) in positions" :key="index" class="ball" :style="{
-            left: `${ballPosition.x}px`,
-            top: `${ballPosition.y}px`,
-            width: `${ballPosition.radius * 2}px`,
-            height: `${ballPosition.radius * 2}px`
-        }" />
+        <div v-if="dev" v-for="(ballPosition, index) in positions" :key="index" class="ball" :style="{
+                left: `${ballPosition.x}px`,
+                top: `${ballPosition.y}px`,
+                width: `${ballPosition.radius * 2}px`,
+                height: `${ballPosition.radius * 2}px`
+            }" />
+    </div>
 </template>
 
 <style scoped>
+.root {
+    position: fixed;
+    inset: 0;
+}
+
 .blob-hit-overlay {
     position: fixed;
     inset: 0;
@@ -672,7 +754,7 @@ onBeforeUnmount(() => {
 
 .blob-area {
     cursor: grab;
-    fill: rgb(140, 164, 242);
+    fill: var(--primary);
     stroke: none;
     pointer-events: all;
 }
@@ -688,14 +770,6 @@ onBeforeUnmount(() => {
     cursor: grabbing;
 }
 
-.overlay {
-    position: fixed;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-}
-
 .blob-face {
     position: fixed;
     width: 60px;
@@ -705,31 +779,41 @@ onBeforeUnmount(() => {
     z-index: 2;
 }
 
+/* dev */
+
+.overlay {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
 .overlay line {
-    stroke: aqua;
+    stroke: var(--text);
     stroke-width: 1;
     stroke-linecap: round;
 }
 
 .outline-point {
-    stroke: aqua;
+    stroke: var(--text);
     stroke-width: 1;
+    fill: var(--text-strong);
 }
 
 .ball {
     position: absolute;
     border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, #88fff1 0%, #3da8e2 50%, #4408ab 100%);
+    background: radial-gradient(circle at 30% 30%, var(--white) 0%, var(--primary) 50%, var(--darker) 100%);
     pointer-events: none;
 }
 
 .blob-area.dev {
-    fill: black;
-    stroke: aqua;
-    stroke-width: 1;
+    fill: var(--white);
+    stroke: none;
 }
 
 .blob-edge.dev {
-    stroke: rgba(114, 114, 114, 0.3);
+    stroke: var(--shadow);
 }
 </style>

@@ -1,4 +1,7 @@
+@import "./assets/css/general-sans.css";
+
 :root {
   background-color: transparent;
   overflow: hidden;
+  font-family: "GeneralSans-Variable", "GeneralSans-Regular", sans-serif;
 }
