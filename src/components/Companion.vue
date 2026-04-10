@@ -1,7 +1,8 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import { Engine, Runner, World, Bodies, Body, Constraint } from "matter-js";
-import faceImage from "../assets/face.png";
+import eyesDefaultImage from "../assets/face/eyes_default.svg";
+import mouthDefaultImage from "../assets/face/mouth_default.svg";
 
 // placeholder props
 const props = defineProps({
@@ -36,6 +37,8 @@ const PETTING_SCALE = 0.7;
 const PETTING_LERP = 0.03;
 const CENTER_LERP_MIN = 0.1;
 const CENTER_LERP_MAX = 0.7;
+const POSITION_STORAGE_KEY = "desktop-companion:blob-center";
+const POSITION_PERSIST_INTERVAL_MS = 400;
 
 const positions = ref([]);
 const grabbing = ref(false);
@@ -53,10 +56,88 @@ let activeBody = null;
 let cursorInsideBlob = false;
 let mousePosition = { x: 0, y: 0 };
 let ballScaleFactors = [];
+let availableSizePollId;
+let lastAvailableScreenSize = { width: 0, height: 0 };
+let lastViewportBounds = { width: 1, height: 1 };
+let lastPositionPersistAt = 0;
 
 const dev = false; // dev mode shows physics bodies and outlines for debugging
 
 const reactionOptions = ["sparkles", "flowers", "hearts"];
+
+const getViewportBounds = () => {
+    const visualWidth = window.visualViewport?.width;
+    const visualHeight = window.visualViewport?.height;
+    const width = Number.isFinite(visualWidth) ? visualWidth : window.innerWidth;
+    const height = Number.isFinite(visualHeight) ? visualHeight : window.innerHeight;
+
+    return {
+        width: Math.max(1, Math.round(width)),
+        height: Math.max(1, Math.round(height)),
+    };
+};
+
+const getAvailableScreenSize = () => ({
+    width: Math.max(1, Math.floor(window.screen?.availWidth || window.innerWidth)),
+    height: Math.max(1, Math.floor(window.screen?.availHeight || window.innerHeight)),
+});
+
+const getBallClusterCenter = () => {
+    if (ballBodies.length === 0) {
+        return null;
+    }
+
+    const total = ballBodies.reduce(
+        (acc, body) => ({
+            x: acc.x + body.position.x,
+            y: acc.y + body.position.y,
+        }),
+        { x: 0, y: 0 }
+    );
+
+    return {
+        x: total.x / ballBodies.length,
+        y: total.y / ballBodies.length,
+    };
+};
+
+const saveCompanionPosition = () => {
+    const center = getBallClusterCenter();
+    if (!center) {
+        return;
+    }
+
+    const { width, height } = getViewportBounds();
+    const payload = {
+        xRatio: Math.min(1, Math.max(0, center.x / width)),
+        yRatio: Math.min(1, Math.max(0, center.y / height)),
+        savedAt: Date.now(),
+    };
+
+    window.localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(payload));
+};
+
+const getSavedCompanionCenter = () => {
+    try {
+        const raw = window.localStorage.getItem(POSITION_STORAGE_KEY);
+        if (!raw) {
+            return null;
+        }
+
+        const parsed = JSON.parse(raw);
+        if (!Number.isFinite(parsed?.xRatio) || !Number.isFinite(parsed?.yRatio)) {
+            return null;
+        }
+
+        const { width, height } = getViewportBounds();
+        return {
+            x: Math.min(width, Math.max(0, parsed.xRatio * width)),
+            y: Math.min(height, Math.max(0, parsed.yRatio * height)),
+        };
+    } catch {
+        return null;
+    }
+};
 
 const clampHue = (value, fallback = 220) => {
     const numericHue = Number(value);
@@ -340,11 +421,12 @@ const getOutlineInteriorAngle = (prev, curr, next) => {
 };
 
 const isBodyTouchingWall = (body) => {
+    const { width, height } = getViewportBounds();
     const radius = body.circleRadius;
     const minX = radius;
-    const maxX = window.innerWidth - radius;
+    const maxX = width - radius;
     const minY = radius;
-    const maxY = window.innerHeight - radius;
+    const maxY = height - radius;
 
     return (
         body.position.x <= minX ||
@@ -431,7 +513,7 @@ const separateOverlappingBalls = () => {
 };
 
 const createBallBodies = (centerX, centerY) => {
-    const spread = Math.max(...BALL_RADII) * 2.6;
+    const spread = Math.max(...BALL_RADII) * 18;
     const bodies = [];
 
     for (let i = 0; i < BALL_COUNT; i += 1) {
@@ -479,7 +561,7 @@ const createWalls = (width, height) => {
     ];
 };
 
-const rebuildWalls = () => {
+const rebuildWalls = (bounds = getViewportBounds()) => {
     if (!engine) {
         return;
     }
@@ -488,7 +570,8 @@ const rebuildWalls = () => {
         World.remove(engine.world, walls);
     }
 
-    walls = createWalls(window.innerWidth, window.innerHeight);
+    const { width, height } = bounds;
+    walls = createWalls(width, height);
     World.add(engine.world, walls);
 };
 
@@ -497,9 +580,10 @@ const updateDragPosition = (event) => {
         return;
     }
 
+    const { width, height } = getViewportBounds();
     const radius = activeBody.circleRadius;
-    const x = Math.min(Math.max(event.clientX, radius), window.innerWidth - radius);
-    const y = Math.min(Math.max(event.clientY, radius), window.innerHeight - radius);
+    const x = Math.min(Math.max(event.clientX, radius), width - radius);
+    const y = Math.min(Math.max(event.clientY, radius), height - radius);
 
     Body.setPosition(activeBody, { x, y });
 
@@ -618,13 +702,38 @@ const onMouseMove = (event) => {
 };
 
 const onResize = () => {
-    rebuildWalls();
+    const nextBounds = getViewportBounds();
+    const previousBounds = lastViewportBounds;
+    lastViewportBounds = nextBounds;
+
+    rebuildWalls(nextBounds);
 
     if (ballBodies.length > 0) {
+        const previousCenter = getBallClusterCenter();
+        if (previousCenter) {
+            const xRatio = previousCenter.x / Math.max(1, previousBounds.width);
+            const yRatio = previousCenter.y / Math.max(1, previousBounds.height);
+            const targetCenter = {
+                x: xRatio * nextBounds.width,
+                y: yRatio * nextBounds.height,
+            };
+
+            const deltaX = targetCenter.x - previousCenter.x;
+            const deltaY = targetCenter.y - previousCenter.y;
+
+            ballBodies.forEach((body) => {
+                Body.setPosition(body, {
+                    x: body.position.x + deltaX,
+                    y: body.position.y + deltaY,
+                });
+            });
+        }
+
+        const { width, height } = nextBounds;
         ballBodies.forEach((body) => {
             const radius = body.circleRadius;
-            const x = Math.min(Math.max(body.position.x, radius), window.innerWidth - radius);
-            const y = Math.min(Math.max(body.position.y, radius), window.innerHeight - radius);
+            const x = Math.min(Math.max(body.position.x, radius), width - radius);
+            const y = Math.min(Math.max(body.position.y, radius), height - radius);
 
             Body.setPosition(body, { x, y });
             Body.setVelocity(body, { x: 0, y: 0 });
@@ -632,7 +741,18 @@ const onResize = () => {
 
         separateOverlappingBalls();
         syncBallPositions();
+        saveCompanionPosition();
     }
+};
+
+const onAvailableScreenSizeChange = () => {
+    const nextSize = getAvailableScreenSize();
+    if (nextSize.width === lastAvailableScreenSize.width && nextSize.height === lastAvailableScreenSize.height) {
+        return;
+    }
+
+    lastAvailableScreenSize = nextSize;
+    onResize();
 };
 
 const animate = () => {
@@ -640,6 +760,11 @@ const animate = () => {
     separateOverlappingBalls();
     clampBallVelocities();
     syncBallPositions();
+    const now = Date.now();
+    if (now - lastPositionPersistAt >= POSITION_PERSIST_INTERVAL_MS) {
+        saveCompanionPosition();
+        lastPositionPersistAt = now;
+    }
     updatesmoothBlobCenter();
     checkConvexAngle();
     animationFrameId = window.requestAnimationFrame(animate);
@@ -650,9 +775,11 @@ onMounted(() => {
         gravity: { x: 0, y: 0.8 },
     });
 
-
-    const centerX = window.innerWidth / 2;
-    const centerY = window.innerHeight / 2;
+    const { width, height } = getViewportBounds();
+    lastViewportBounds = { width, height };
+    const savedCenter = getSavedCompanionCenter();
+    const centerX = savedCenter?.x ?? width / 2;
+    const centerY = savedCenter?.y ?? height / 2;
     ballBodies = createBallBodies(centerX, centerY);
     ballScaleFactors = ballBodies.map(() => 1);
     chainConstraints = createChainConstraints(ballBodies);
@@ -663,7 +790,7 @@ onMounted(() => {
     }));
     updatesmoothBlobCenter();
 
-    walls = createWalls(window.innerWidth, window.innerHeight);
+    walls = createWalls(width, height);
     World.add(engine.world, [...ballBodies, ...chainConstraints, ...walls]);
 
     runner = Runner.create();
@@ -672,17 +799,38 @@ onMounted(() => {
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", stopDrag);
     window.addEventListener("resize", onResize);
+    window.addEventListener("focus", onResize);
+    window.addEventListener("pageshow", onResize);
+    document.addEventListener("visibilitychange", onResize);
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", onResize);
+        window.visualViewport.addEventListener("scroll", onResize);
+    }
+    lastAvailableScreenSize = getAvailableScreenSize();
+    availableSizePollId = window.setInterval(onAvailableScreenSizeChange, 300);
+    saveCompanionPosition();
 
     animate();
-
-    console.log("hue:", hue.value);
-    console.log("assignedHue:", assignedHue.value);
 });
 
 onBeforeUnmount(() => {
     window.removeEventListener("mousemove", onMouseMove);
     window.removeEventListener("mouseup", stopDrag);
     window.removeEventListener("resize", onResize);
+    window.removeEventListener("focus", onResize);
+    window.removeEventListener("pageshow", onResize);
+    document.removeEventListener("visibilitychange", onResize);
+    if (window.visualViewport) {
+        window.visualViewport.removeEventListener("resize", onResize);
+        window.visualViewport.removeEventListener("scroll", onResize);
+    }
+
+    if (availableSizePollId) {
+        window.clearInterval(availableSizePollId);
+        availableSizePollId = undefined;
+    }
+
+    saveCompanionPosition();
 
     if (animationFrameId) {
         window.cancelAnimationFrame(animationFrameId);
@@ -716,7 +864,10 @@ onBeforeUnmount(() => {
                 :style="{ strokeWidth: `${EDGE_WIDTH}px` }" @mousedown="startDrag" />
         </svg>
 
-        <img v-if="!dev" class="blob-face" :src="faceImage" alt="" aria-hidden="true" :style="faceStyle" />
+        <div v-if="!dev" class="face" aria-hidden="true" :style="faceStyle">
+            <img class="face-eyes" :src="eyesDefaultImage" alt="" />
+            <img class="face-mouth" :src="mouthDefaultImage" alt="" />
+        </div>
 
         <svg v-if="dev" class="overlay" aria-hidden="true">
 
@@ -770,13 +921,30 @@ onBeforeUnmount(() => {
     cursor: grabbing;
 }
 
-.blob-face {
+.face {
     position: fixed;
-    width: 60px;
-    height: auto;
     transform: translate(-50%, -100%);
     pointer-events: none;
     z-index: 2;
+}
+
+.face-eyes,
+.face-mouth {
+    position: absolute;
+    left: 50%;
+    display: block;
+    height: auto;
+    transform: translateX(-50%);
+}
+
+.face-eyes {
+    width: 3.5rem;
+    bottom: 1.2rem;
+}
+
+.face-mouth {
+    width: 2.8rem;
+    bottom: -0.5rem;
 }
 
 /* dev */

@@ -5,6 +5,11 @@ const http = require('http');
 
 let mainWindow;
 let tray;
+let workAreaPollId;
+let lastWorkAreaSignature = '';
+let onDisplayMetricsChanged;
+let onDisplayAdded;
+let onDisplayRemoved;
 
 // Use app.isPackaged to detect production vs development. When running locally
 // via `npm run dev` the app will not be packaged so we should load the Vite dev
@@ -61,7 +66,7 @@ function sanitizeOnboardingData(data) {
         return fallback;
     };
 
-    const allowedTraits = ['active', 'optimistic', 'gentle', 'cool', 'mysterious', 'cute'];
+    const allowedTraits = ['active', 'optimistic', 'gentle', 'chill', 'mysterious', 'cute'];
     const traits = Array.isArray(data?.traits)
         ? data.traits.filter((trait) => typeof trait === 'string' && allowedTraits.includes(trait))
         : [];
@@ -143,6 +148,49 @@ function showMainWindow() {
 
     mainWindow.show();
     mainWindow.setAlwaysOnTop(true, 'screen-saver');
+}
+
+function getWorkArea() {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+        return null;
+    }
+
+    const display = screen.getDisplayMatching(mainWindow.getBounds());
+    return display?.workArea || null;
+}
+
+function syncToWorkArea(force = false) {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+        return;
+    }
+
+    const workArea = getWorkArea();
+    if (!workArea) {
+        return;
+    }
+
+    const signature = `${workArea.x},${workArea.y},${workArea.width},${workArea.height}`;
+    if (!force && signature === lastWorkAreaSignature) {
+        return;
+    }
+
+    lastWorkAreaSignature = signature;
+    const current = mainWindow.getBounds();
+    if (
+        current.x === workArea.x &&
+        current.y === workArea.y &&
+        current.width === workArea.width &&
+        current.height === workArea.height
+    ) {
+        return;
+    }
+
+    mainWindow.setBounds({
+        x: workArea.x,
+        y: workArea.y,
+        width: workArea.width,
+        height: workArea.height,
+    });
 }
 
 let ipcRegistered = false;
@@ -256,6 +304,26 @@ app.whenReady().then(async () => {
     mainWindow.setAlwaysOnTop(true, "screen-saver");
     mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     mainWindow.setSkipTaskbar(true);
+    syncToWorkArea(true);
+
+    onDisplayMetricsChanged = () => {
+        syncToWorkArea();
+    };
+    screen.on('display-metrics-changed', onDisplayMetricsChanged);
+
+    onDisplayAdded = () => {
+        syncToWorkArea(true);
+    };
+    screen.on('display-added', onDisplayAdded);
+
+    onDisplayRemoved = () => {
+        syncToWorkArea(true);
+    };
+    screen.on('display-removed', onDisplayRemoved);
+
+    workAreaPollId = setInterval(() => {
+        syncToWorkArea();
+    }, 1000);
 
     registerIpcHandlers();
 
@@ -353,6 +421,26 @@ app.whenReady().then(async () => {
 });
 
 app.on("before-quit", () => {
+    if (workAreaPollId) {
+        clearInterval(workAreaPollId);
+        workAreaPollId = undefined;
+    }
+
+    if (onDisplayMetricsChanged) {
+        screen.removeListener('display-metrics-changed', onDisplayMetricsChanged);
+        onDisplayMetricsChanged = undefined;
+    }
+
+    if (onDisplayAdded) {
+        screen.removeListener('display-added', onDisplayAdded);
+        onDisplayAdded = undefined;
+    }
+
+    if (onDisplayRemoved) {
+        screen.removeListener('display-removed', onDisplayRemoved);
+        onDisplayRemoved = undefined;
+    }
+
     if (tray) {
         tray.destroy();
         tray = null;

@@ -10,7 +10,7 @@ const onboardingCompleted = ref(false);
 const onboardingSaving = ref(false);
 const onboardingStep = ref(1);
 const totalOnboardingSteps = 3;
-const traitOptions = ["active", "optimistic", "gentle", "cool", "mysterious", "cute"];
+const traitOptions = ["active", "optimistic", "gentle", "chill", "mysterious", "cute"];
 const reactionOptions = ["sparkles", "flowers", "hearts"];
 const selectedTraits = ref([]);
 const questionAnswers = ref({
@@ -163,7 +163,7 @@ const calculateAssignedProfile = ({ sliders, traits, hue }) => {
     },
     optimistic: () => addHueContribution(100, 0.8), // yellow
     gentle: () => addHueContribution(200, 0.8), // cyan
-    cool: () => addHueContribution(225, 0.8), // blue/cyan
+    chill: () => addHueContribution(225, 0.8), // blue/cyan
     mysterious: () => addHueContribution(300, 0.8), // purple
     cute: () => addHueContribution(325, 0.8), // pink/purple
   };
@@ -172,7 +172,7 @@ const calculateAssignedProfile = ({ sliders, traits, hue }) => {
     active: () => addHueContribution(275, 0.2), // blue/purple
     optimistic: () => addHueContribution(225, 0.2), // cyan/blue
     gentle: () => addHueContribution(350, 0.2), // red
-    cool: () => addHueContribution(50, 0.2), // orange
+    chill: () => addHueContribution(50, 0.2), // orange
     mysterious: () => addHueContribution(125, 0.2), // yellow/green
     cute: () => addHueContribution(175, 0.2), // green/cyan
   };
