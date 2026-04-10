@@ -21,11 +21,11 @@ const props = defineProps({
 
 const { ipcRenderer } = require("electron");
 
-//const BALL_RADII = [20, 15, 15, 20, 25];
-//const BALL_RADII = [20, 20, 20, 20, 25];
-const BALL_RADII = [20, 20, 20, 20, 20];
+const BALL_COUNT = 5;
+const BASE_BALL_RADIUS = 20;
+const MAX_RADIUS_VARIATION = 3;
+const MIN_BALL_RADIUS = 15;
 const CHAIN_GAP = 0;
-const BALL_COUNT = BALL_RADII.length;
 const WALL_THICKNESS = 500;
 const OUTLINE_PADDING = 10;
 const OUTLINE_SMOOTH_FACTOR = 0.25;
@@ -37,14 +37,23 @@ const PETTING_SCALE = 0.7;
 const PETTING_LERP = 0.03;
 const CENTER_LERP_MIN = 0.1;
 const CENTER_LERP_MAX = 0.7;
+const COMPANION_STATES = {
+    IDLE: "idle",
+    ENGAGED: "engaged",
+    ACTIVE: "active",
+    SLEEPING: "sleeping",
+};
+const BASE_NUDGE_INTERVAL_MS = 1500;
+const BASE_NUDGE_VELOCITY = 0.5;
 const POSITION_STORAGE_KEY = "desktop-companion:blob-center";
-const POSITION_PERSIST_INTERVAL_MS = 400;
+const PERSIST_INTERVAL_MS = 500;
 
 const positions = ref([]);
 const grabbing = ref(false);
 const blobArea = ref(null);
 const blobEdge = ref(null);
 const smoothBlobCenter = ref(null);
+const companionState = ref(COMPANION_STATES.IDLE);
 
 let engine;
 let runner;
@@ -59,11 +68,85 @@ let ballScaleFactors = [];
 let availableSizePollId;
 let lastAvailableScreenSize = { width: 0, height: 0 };
 let lastViewportBounds = { width: 1, height: 1 };
-let lastPositionPersistAt = 0;
+let lastPersist = 0;
+let nextIdleNudgeAt = 0;
 
 const dev = false; // dev mode shows physics bodies and outlines for debugging
 
 const reactionOptions = ["sparkles", "flowers", "hearts"];
+
+const randomBetween = (min, max) => min + Math.random() * (max - min);
+const lerp = (start, end, t) => start + (end - start) * t;
+
+const getCompanionState = () => {
+    if (grabbing.value || cursorInsideBlob) {
+        return COMPANION_STATES.ENGAGED;
+    }
+
+    // Placeholder transitions for ACTIVE and SLEEPING will be added later.
+    return COMPANION_STATES.IDLE;
+};
+
+const scheduleNextNudge = (now = Date.now()) => {
+    const activityLevel = activity.value;
+    const minDelay = lerp(BASE_NUDGE_INTERVAL_MS * 2, BASE_NUDGE_INTERVAL_MS, activityLevel);
+    const maxDelay = lerp(BASE_NUDGE_INTERVAL_MS * 4, BASE_NUDGE_INTERVAL_MS * 2, activityLevel);
+    const delayMs = randomBetween(minDelay, maxDelay);
+    nextIdleNudgeAt = now + delayMs;
+};
+
+const setCompanionState = (nextState, now = Date.now()) => {
+    if (companionState.value === nextState) {
+        return;
+    }
+
+    companionState.value = nextState;
+    if (nextState === COMPANION_STATES.IDLE) {
+        scheduleNextNudge(now);
+        return;
+    }
+
+    nextIdleNudgeAt = 0;
+};
+
+const syncCompanionState = (now = Date.now()) => {
+    const derivedState = getCompanionState();
+    setCompanionState(derivedState, now);
+};
+
+const applyIdleMovement = (now = Date.now()) => {
+    if (companionState.value !== COMPANION_STATES.IDLE || ballBodies.length === 0) {
+        return;
+    }
+
+    if (!nextIdleNudgeAt) {
+        scheduleNextNudge(now);
+        return;
+    }
+
+    if (now < nextIdleNudgeAt) {
+        return;
+    }
+
+    const activityLevel = activity.value;
+    const direction = Math.random() < 0.5 ? -1 : 1;
+    const minVelocity = lerp(BASE_NUDGE_VELOCITY, BASE_NUDGE_VELOCITY * 2, activityLevel);
+    const maxVelocity = lerp(BASE_NUDGE_VELOCITY * 2, BASE_NUDGE_VELOCITY * 4, activityLevel);
+    const velocityBoost = randomBetween(minVelocity, maxVelocity) * direction;
+
+    ballBodies.forEach((body) => {
+        if (body.isStatic) {
+            return;
+        }
+
+        Body.setVelocity(body, {
+            x: body.velocity.x + velocityBoost,
+            y: body.velocity.y,
+        });
+    });
+
+    scheduleNextNudge(now);
+};
 
 const getViewportBounds = () => {
     const visualWidth = window.visualViewport?.width;
@@ -168,6 +251,17 @@ const symmetry = computed(() => clampUnit(props.onboardingData?.symmetry, 0.5));
 const variability = computed(() => clampUnit(props.onboardingData?.variability, 0.5));
 
 const activity = computed(() => clampUnit(props.onboardingData?.activity, 0.5));
+
+const ballRadii = computed(() => {
+    const centerIndex = (BALL_COUNT - 1) / 2;
+    const variation = (1 - symmetry.value) * MAX_RADIUS_VARIATION;
+
+    return Array.from({ length: BALL_COUNT }, (_, index) => {
+        const offsetFromCenter = index - centerIndex;
+        const radius = BASE_BALL_RADIUS + offsetFromCenter * variation;
+        return Math.max(MIN_BALL_RADIUS, Math.round(radius));
+    });
+});
 
 const reaction = computed(() => {
     const reaction = props.onboardingData?.reaction;
@@ -513,12 +607,13 @@ const separateOverlappingBalls = () => {
 };
 
 const createBallBodies = (centerX, centerY) => {
-    const spread = Math.max(...BALL_RADII) * 18;
+    const radii = ballRadii.value;
+    const spread = Math.max(...radii) * 18;
     const bodies = [];
 
-    for (let i = 0; i < BALL_COUNT; i += 1) {
-        const angle = (i / BALL_COUNT) * Math.PI * 2;
-        const radius = BALL_RADII[i];
+    for (let i = 0; i < radii.length; i += 1) {
+        const angle = (i / radii.length) * Math.PI * 2;
+        const radius = radii[i];
         bodies.push(
             Bodies.circle(centerX + Math.cos(angle) * spread, centerY + Math.sin(angle) * spread, radius, {
                 restitution: 0.8,
@@ -689,6 +784,7 @@ const updateHoverState = () => {
     const insideBlobBand = isPointInBlob(blobEdge.value, x, y, "stroke");
 
     cursorInsideBlob = insideBlobFill || insideBlobBand;
+    syncCompanionState();
     ipcRenderer.send("set-ignore-mouse-events", !cursorInsideBlob);
 };
 
@@ -756,14 +852,16 @@ const onAvailableScreenSizeChange = () => {
 };
 
 const animate = () => {
+    const now = Date.now();
+    syncCompanionState(now);
+    applyIdleMovement(now);
     updateHoverBallScale();
     separateOverlappingBalls();
     clampBallVelocities();
     syncBallPositions();
-    const now = Date.now();
-    if (now - lastPositionPersistAt >= POSITION_PERSIST_INTERVAL_MS) {
+    if (now - lastPersist >= PERSIST_INTERVAL_MS) {
         saveCompanionPosition();
-        lastPositionPersistAt = now;
+        lastPersist = now;
     }
     updatesmoothBlobCenter();
     checkConvexAngle();
@@ -808,6 +906,7 @@ onMounted(() => {
     }
     lastAvailableScreenSize = getAvailableScreenSize();
     availableSizePollId = window.setInterval(onAvailableScreenSizeChange, 300);
+    syncCompanionState();
     saveCompanionPosition();
 
     animate();
