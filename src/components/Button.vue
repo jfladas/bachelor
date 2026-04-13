@@ -4,10 +4,6 @@ const props = defineProps({
         type: String,
         default: "secondary",
     },
-    type: {
-        type: String,
-        default: "button",
-    },
     disabled: {
         type: Boolean,
         default: false,
@@ -22,7 +18,7 @@ const handleClick = (event) => {
 </script>
 
 <template>
-    <button :type="props.type" :disabled="props.disabled" :class="`${props.variant}`" @click="handleClick">
+    <button :disabled="props.disabled" :class="`${props.variant}`" @click="handleClick">
         <slot />
     </button>
 </template>
@@ -33,10 +29,10 @@ button {
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    width: 100%;
+    width: auto;
     border: none;
     border-radius: 2rem;
-    padding: 0.8rem;
+    padding: 0.8rem 1rem;
     font-size: 1rem;
     font-weight: 500;
     color: var(--white);
@@ -66,7 +62,7 @@ button {
 button:disabled,
 button:disabled:hover {
     background: var(--disabled);
-    cursor: wait;
+    cursor: default;
     transform: none;
 }
 
@@ -75,7 +71,29 @@ button:focus-visible {
     outline-offset: 2px;
 }
 
-button :slotted(svg) {
+button :slotted(svg),
+button :slotted(.icon svg) {
     height: 1.2rem;
+    margin: 0;
+}
+
+.close-button {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+}
+
+.circle-small {
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.circle-big {
+    width: 3rem;
+    height: 3rem;
 }
 </style>

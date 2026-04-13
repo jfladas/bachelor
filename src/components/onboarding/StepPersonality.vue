@@ -1,5 +1,5 @@
 <script setup>
-import Button from "./Button.vue";
+import Button from "../Button.vue";
 
 const props = defineProps({
     questionAnswers: {
@@ -28,7 +28,7 @@ const updateAnswer = (key, event) => {
 
 <template>
     <section>
-        <h1>Represent yourself</h1>
+        <h1 class="title">Represent yourself</h1>
         <p class="description">
             Adjust the sliders and choose traits to reflect your personality. This will impact the appearance and
             behavior
@@ -65,11 +65,10 @@ const updateAnswer = (key, event) => {
                 min="0" max="1" step="0.1" @input="updateAnswer('groundedCreative', $event)" />
         </div>
 
-        <h1>I am...</h1>
+        <h1 class="title">I am...</h1>
         <div class="field traits-field">
-            <Button v-for="trait in props.traitOptions" :key="trait" type="button" variant="secondary"
-                class="trait-chip" :class="{ active: props.selectedTraits.includes(trait) }"
-                @click="emit('toggle-trait', trait)">
+            <Button v-for="trait in props.traitOptions" :key="trait" variant="secondary" class="trait-chip"
+                :class="{ active: props.selectedTraits.includes(trait) }" @click="emit('toggle-trait', trait)">
                 {{ trait }}
             </Button>
         </div>
@@ -77,26 +76,6 @@ const updateAnswer = (key, event) => {
 </template>
 
 <style scoped>
-h1 {
-    margin: 1rem 0 0.5rem 0;
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--text-strong);
-}
-
-.description {
-    color: var(--text);
-    line-height: 1.5;
-    font-size: 1rem;
-    font-weight: 500;
-}
-
-.field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
 .sliders-field {
     margin-top: 2rem;
 }

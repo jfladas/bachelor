@@ -213,6 +213,14 @@ function registerIpcHandlers() {
         app.quit();
     });
 
+    ipcMain.on('hide-app', () => {
+        if (!mainWindow) {
+            return;
+        }
+
+        mainWindow.hide();
+    });
+
     ipcMain.handle('has-completed-onboarding', () => {
         const state = readOnboardingState();
         return state.completed;

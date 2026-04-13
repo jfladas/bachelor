@@ -12,4 +12,5 @@ export const createHueVariables = (hue) => ({
     "--text-muted": "oklch(80% 0.02 var(--hue))",
     "--secondary": "oklch(90% 0.02 var(--hue))",
     "--secondary-hover": "oklch(85% 0.03 var(--hue))",
+    "--disabled": "oklch(50% 0.1 var(--hue) / 0.5)",
 });

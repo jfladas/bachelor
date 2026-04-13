@@ -1,0 +1,57 @@
+::selection {
+    background: var(--lighter);
+    color: var(--text-strong);
+}
+
+* {
+    font-family: "GeneralSans-Variable", "GeneralSans-Regular", sans-serif;
+}
+
+.window {
+    padding: 1.2rem 2rem 1.8rem 2rem;
+    border-radius: 2rem;
+    background: radial-gradient(circle, white 50%, var(--white));
+    color: var(--text-strong);
+    box-shadow: 0 0 3rem var(--shadow);
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.eyebrow {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+
+.title {
+    margin: 1rem 0 0.5rem 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-strong);
+}
+
+.description {
+    color: var(--text);
+    line-height: 1.5;
+    font-size: 1rem;
+    font-weight: 500;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.actions {
+    display: flex;
+    gap: 0.7rem;
+    position: absolute;
+    bottom: 1.5rem;
+    right: 2rem;
+}

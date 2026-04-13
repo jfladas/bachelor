@@ -521,12 +521,12 @@ onBeforeUnmount(() => {
 
 .blob-area.grab,
 .blob-edge.grab {
-    cursor: grab;
+    cursor: pointer;
 }
 
 .blob-area.grabbing,
 .blob-edge.grabbing {
-    cursor: grabbing;
+    cursor: move;
 }
 
 .springs {
@@ -557,13 +557,13 @@ onBeforeUnmount(() => {
     border-radius: 6px;
     border: 1px solid aqua;
     background: rgba(255, 255, 255, 0.1);
-    cursor: grab;
+    cursor: pointer;
     user-select: none;
     transform-origin: center;
     -webkit-app-region: no-drag;
 }
 
 .link.grabbing {
-    cursor: grabbing;
+    cursor: move;
 }
 </style>

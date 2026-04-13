@@ -11,7 +11,7 @@ const PETTING_SCALE = 0.7;
 const PETTING_LERP = 0.03;
 const CENTER_LERP_MIN = 0.1;
 const CENTER_LERP_MAX = 0.7;
-const COMPANION_STATES = {
+export const COMPANION_STATES = {
     IDLE: "idle",
     ENGAGED: "engaged",
     ACTIVE: "active",
@@ -33,6 +33,7 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
     const blobEdge = ref(null);
     const smoothBlobCenter = ref(null);
     const companionState = ref(COMPANION_STATES.IDLE);
+    const manualCompanionState = ref(null);
 
     let engine;
     let runner;
@@ -49,6 +50,8 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
     let lastViewportBounds = { width: 1, height: 1 };
     let lastPersist = 0;
     let nextIdleNudgeAt = 0;
+    let lastDragMoveAt = 0;
+    let interactionLocked = false;
 
     const setBlobAreaRef = (element) => {
         blobArea.value = element;
@@ -388,7 +391,9 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
             return;
         }
 
-        Body.setStatic(activeBody, false);
+        if (activeBody) {
+            Body.setStatic(activeBody, false);
+        }
         activeBody = null;
         grabbing.value = false;
     };
@@ -556,8 +561,49 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
     };
 
     const syncCompanionState = (now = Date.now()) => {
+        if (manualCompanionState.value) {
+            setCompanionState(manualCompanionState.value, now);
+            return;
+        }
+
         const derivedState = getCompanionState();
         setCompanionState(derivedState, now);
+    };
+
+    const setManualState = (nextState = null) => {
+        const validStates = Object.values(COMPANION_STATES);
+
+        if (nextState !== null && !validStates.includes(nextState)) {
+            return;
+        }
+
+        manualCompanionState.value = nextState;
+        syncCompanionState();
+    };
+
+    const didDragRecently = (windowMs = 180) => {
+        if (!lastDragMoveAt) {
+            return false;
+        }
+
+        return Date.now() - lastDragMoveAt <= windowMs;
+    };
+
+    const playMiniCelebrate = () => {
+        if (ballBodies.length === 0) {
+            return;
+        }
+
+        ballBodies.forEach((body) => {
+            if (body.isStatic) {
+                return;
+            }
+
+            Body.setVelocity(body, {
+                x: body.velocity.x + randomBetween(-1.25, 1.25),
+                y: body.velocity.y - randomBetween(1.4, 2.6),
+            });
+        });
     };
 
     const applyIdleMovement = (now = Date.now()) => {
@@ -650,6 +696,7 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
             return;
         }
 
+        lastDragMoveAt = Date.now();
         updateDragPosition(event);
     };
 
@@ -693,7 +740,20 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
 
         cursorInsideBlob = insideBlobFill || insideBlobBand;
         syncCompanionState();
-        sendIgnoreMouseEvents(!cursorInsideBlob);
+
+        const shouldIgnoreMouseEvents = interactionLocked ? false : grabbing.value ? false : !cursorInsideBlob;
+        sendIgnoreMouseEvents(shouldIgnoreMouseEvents);
+    };
+
+    const setInteractionLocked = (locked) => {
+        interactionLocked = Boolean(locked);
+
+        if (interactionLocked) {
+            sendIgnoreMouseEvents(false);
+            return;
+        }
+
+        updateHoverState();
     };
 
     const onMouseMove = (event) => {
@@ -855,6 +915,9 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
         activeBody = null;
         cursorInsideBlob = false;
         mousePosition = { x: 0, y: 0 };
+        manualCompanionState.value = null;
+        lastDragMoveAt = 0;
+        interactionLocked = false;
         ballScaleFactors = [];
         ballBodies = [];
         chainConstraints = [];
@@ -865,11 +928,16 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
     return {
         positions,
         grabbing,
+        companionState,
         outlinePoints,
         blobPath,
         faceStyle,
         setBlobAreaRef,
         setBlobEdgeRef,
         startDrag,
+        didDragRecently,
+        setInteractionLocked,
+        setManualState,
+        playMiniCelebrate,
     };
 };

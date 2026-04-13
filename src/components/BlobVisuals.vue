@@ -44,23 +44,34 @@ const props = defineProps({
         type: Function,
         default: null,
     },
+    isActive: {
+        type: Boolean,
+        default: false,
+    },
+    companionState: {
+        type: String,
+        default: "idle",
+    },
 });
 
 const dev = false; // dev mode shows physics bodies and outlines for debugging
 
-defineEmits(["start-drag"]);
+defineEmits(["start-drag", "activate-companion"]);
 </script>
 
 <template>
-    <div class="root" :style="props.hueVariables">
+    <div class="root" :style="props.hueVariables"
+        :class="[{ active: props.isActive }, `state-${props.companionState}`]">
         <svg class="blob-overlay" aria-hidden="true">
             <path :ref="props.blobAreaRef" class="blob-area" :class="{ grabbing: props.grabbing, dev: dev }"
-                :d="props.blobPath" @mousedown="$emit('start-drag', $event)" />
+                :d="props.blobPath" @mousedown="$emit('start-drag', $event)"
+                @click.stop="$emit('activate-companion')" />
             <path :ref="props.blobEdgeRef" class="blob-edge" :class="{ dev: dev }" :d="props.blobPath"
-                :style="{ strokeWidth: `${props.edgeWidth}px` }" @mousedown="$emit('start-drag', $event)" />
+                :style="{ strokeWidth: `${props.edgeWidth}px` }" @mousedown="$emit('start-drag', $event)"
+                @click.stop="$emit('activate-companion')" />
         </svg>
 
-        <div v-if="!dev" class="face" aria-hidden="true" :style="props.faceStyle">
+        <div v-if="!dev" class="face" :style="props.faceStyle">
             <img class="face-eyes" :src="props.eyesSrc" alt="" />
             <img class="face-mouth" :src="props.mouthSrc" alt="" />
         </div>
@@ -99,21 +110,23 @@ defineEmits(["start-drag"]);
 }
 
 .blob-area {
-    cursor: grab;
+    cursor: pointer;
     fill: var(--primary);
     stroke: none;
     pointer-events: all;
+    filter: drop-shadow(0 0 1.5rem color-mix(in oklch, var(--shadow) 70%, transparent));
+    transition: filter 0.5s ease;
 }
 
 .blob-edge {
-    cursor: grab;
+    cursor: pointer;
     fill: none;
     stroke: none;
     pointer-events: stroke;
 }
 
 .blob-area.grabbing {
-    cursor: grabbing;
+    cursor: move;
 }
 
 .face {
@@ -176,5 +189,9 @@ defineEmits(["start-drag"]);
 
 .blob-edge.dev {
     stroke: var(--shadow);
+}
+
+.root.active .blob-area {
+    filter: drop-shadow(0 0 1.5rem color-mix(in oklch, var(--primary) 70%, transparent));
 }
 </style>

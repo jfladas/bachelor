@@ -1,4 +1,5 @@
 @import "./assets/css/general-sans.css";
+@import "./assets/css/ui-base.css";
 
 :root {
   background-color: transparent;
