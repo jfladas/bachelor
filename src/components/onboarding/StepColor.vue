@@ -127,8 +127,9 @@ onBeforeUnmount(() => {
     <section>
         <h1 class="title">Confirm your color</h1>
         <p class="description">
-            Based on your answers, this color has been assigned to you. If you feel like it's not quite right, drag the
-            wheel to adjust it. Choose a color that represents you!
+            Based on your answers, this color has been assigned to you.
+            If you feel like it's not quite right, drag the wheel to adjust it.
+            Choose a color that represents you!
         </p>
 
         <div class="field color-field">

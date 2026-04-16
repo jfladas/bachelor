@@ -32,7 +32,6 @@ const onboardingDefaults = {
             reservedOpen: 0.5,
             calmAssertive: 0.5,
             rationalEmotional: 0.5,
-            groundedCreative: 0.5,
         },
         hueOverride: false,
     },
@@ -66,7 +65,7 @@ function sanitizeOnboardingData(data) {
         return fallback;
     };
 
-    const allowedTraits = ['active', 'optimistic', 'gentle', 'chill', 'mysterious', 'cute'];
+    const allowedTraits = ['active', 'optimistic', 'gentle', 'chill', 'mysterious', 'cute', 'grounded', 'creative'];
     const traits = Array.isArray(data?.traits)
         ? data.traits.filter((trait) => typeof trait === 'string' && allowedTraits.includes(trait))
         : [];
@@ -78,7 +77,6 @@ function sanitizeOnboardingData(data) {
         reservedOpen: clampUnit(data?.questionAnswers?.reservedOpen, 0.5),
         calmAssertive: clampUnit(data?.questionAnswers?.calmAssertive, 0.5),
         rationalEmotional: clampUnit(data?.questionAnswers?.rationalEmotional, 0.5),
-        groundedCreative: clampUnit(data?.questionAnswers?.groundedCreative, 0.5),
     };
 
     return {
@@ -88,7 +86,7 @@ function sanitizeOnboardingData(data) {
         variability: clampUnit(data?.variability ?? data?.randomness, 0.5),
         activity: clampUnit(data?.activity ?? data?.speed, 0.5),
         reaction: normalizeReaction(data?.reaction, 'sparkles'),
-        traits: Array.from(new Set(traits)).slice(0, 6),
+        traits: Array.from(new Set(traits)).slice(0, allowedTraits.length),
         questionAnswers,
         hueOverride: Boolean(data?.hueOverride ?? (hue !== assignedHue)),
     };

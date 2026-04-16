@@ -161,7 +161,7 @@ const getJournalPanelSide = () => {
 const panelStyle = computed(() => {
     const { width } = getViewportBounds();
     const panelWidth = 480;
-    const minInset = 12;
+    const minInset = 110;
     const bottomOffset = 48;
     const sideOffset = 110;
     const maxInset = Math.max(minInset, width - panelWidth - minInset);

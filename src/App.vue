@@ -12,6 +12,7 @@ const {
   onboardingSaving,
   onboardingStep,
   totalOnboardingSteps,
+  sliderOptions,
   traitOptions,
   selectedTraits,
   questionAnswers,
@@ -54,8 +55,8 @@ const {
       <StepIntro v-if="onboardingStep === 1" />
 
       <StepPersonality v-else-if="onboardingStep === 2" :question-answers="questionAnswers"
-        :selected-traits="selectedTraits" :trait-options="traitOptions" @update-answer="updateQuestionAnswer"
-        @toggle-trait="toggleTrait" />
+        :slider-options="sliderOptions" :selected-traits="selectedTraits" :trait-options="traitOptions"
+        @update-answer="updateQuestionAnswer" @toggle-trait="toggleTrait" />
 
       <StepColor v-else :hue="onboardingData.hue" :assigned-hue="onboardingData.assignedHue"
         :disabled="onboardingSaving" @manual-hue-change="onManualHueChange" @reset-hue="onResetHueToAssigned" />
@@ -112,7 +113,7 @@ const {
 .window {
   position: relative;
   width: 40rem;
-  height: 42rem;
+  height: 40rem;
   pointer-events: auto;
 }
 

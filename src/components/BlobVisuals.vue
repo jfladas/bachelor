@@ -134,6 +134,7 @@ defineEmits(["start-drag", "activate-companion"]);
     transform: translate(-50%, -100%);
     pointer-events: none;
     z-index: 2;
+    user-select: none;
 }
 
 .face-eyes,

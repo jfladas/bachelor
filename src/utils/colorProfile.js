@@ -43,10 +43,9 @@ export const calculateAssignedProfile = ({ sliders, traits, hue }) => {
         reservedOpen: clampUnit(sliders?.reservedOpen, 0.5, 2),
         calmAssertive: clampUnit(sliders?.calmAssertive, 0.5, 2),
         rationalEmotional: clampUnit(sliders?.rationalEmotional, 0.5, 2),
-        groundedCreative: clampUnit(sliders?.groundedCreative, 0.5, 2),
     };
 
-    const normalizedTraits = normalizeTraits(traits, traitOptions, 6);
+    const normalizedTraits = normalizeTraits(traits, traitOptions, traitOptions.length);
     const hueContributions = [];
     const addHueContribution = (candidateHue, weight = 1) => {
         hueContributions.push({
@@ -58,7 +57,6 @@ export const calculateAssignedProfile = ({ sliders, traits, hue }) => {
     addInterpolatedHue(hueContributions, 200, 20, normalizedSliders.calmAssertive, 1);
     addInterpolatedHue(hueContributions, 275, 50, normalizedSliders.reservedOpen, 1);
     addInterpolatedHue(hueContributions, 250, 50, normalizedSliders.rationalEmotional, 1);
-    addInterpolatedHue(hueContributions, 150, 325, normalizedSliders.groundedCreative, 1);
 
     const traitHueMap = {
         active: () => {
@@ -70,6 +68,8 @@ export const calculateAssignedProfile = ({ sliders, traits, hue }) => {
         chill: () => addHueContribution(225, 0.8),
         mysterious: () => addHueContribution(300, 0.8),
         cute: () => addHueContribution(325, 0.8),
+        grounded: () => addHueContribution(150, 0.8),
+        creative: () => addHueContribution(325, 0.8),
     };
 
     const traitOppositeHueMap = {
@@ -96,7 +96,10 @@ export const calculateAssignedProfile = ({ sliders, traits, hue }) => {
     }
 
     const calculatedSymmetry =
-        (1 - normalizedSliders.groundedCreative) * 0.5 + (normalizedTraits.includes("chill") ? 0.5 : 0);
+        0.25 +
+        (normalizedTraits.includes("grounded") ? 0.25 : 0) -
+        (normalizedTraits.includes("creative") ? 0.25 : 0) +
+        (normalizedTraits.includes("chill") ? 0.5 : 0);
 
     const calculatedVariability =
         normalizedSliders.rationalEmotional * 0.5 + (normalizedTraits.includes("mysterious") ? 0.5 : 0);

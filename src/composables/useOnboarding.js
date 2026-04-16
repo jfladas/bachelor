@@ -1,5 +1,5 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { reactionOptions, traitOptions } from "../constants/onboardingOptions";
+import { reactionOptions, sliderOptions, traitOptions } from "../constants/onboardingOptions";
 import { calculateAssignedProfile } from "../utils/colorProfile";
 import { createHueVariables } from "../utils/themeColors";
 import { clampHue, clampUnit, normalizeReaction, normalizeTraits } from "../utils/validation";
@@ -7,13 +7,25 @@ import { clampHue, clampUnit, normalizeReaction, normalizeTraits } from "../util
 const { ipcRenderer } = require("electron");
 
 const TOTAL_ONBOARDING_STEPS = 3;
+const DEFAULT_SLIDER_VALUE = 0.5;
 
-const createDefaultQuestionAnswers = () => ({
-    reservedOpen: 0.5,
-    calmAssertive: 0.5,
-    rationalEmotional: 0.5,
-    groundedCreative: 0.5,
-});
+const defaultQuestionAnswers = sliderOptions.reduce((answers, sliderOption) => {
+    answers[sliderOption.key] = clampUnit(DEFAULT_SLIDER_VALUE, DEFAULT_SLIDER_VALUE, 2);
+    return answers;
+}, {});
+
+const createDefaultQuestionAnswers = () => ({ ...defaultQuestionAnswers });
+
+const normalizeQuestionAnswers = (answers = {}) => {
+    return sliderOptions.reduce((normalizedAnswers, sliderOption) => {
+        normalizedAnswers[sliderOption.key] = clampUnit(
+            answers?.[sliderOption.key],
+            defaultQuestionAnswers[sliderOption.key],
+            2
+        );
+        return normalizedAnswers;
+    }, {});
+};
 
 const createDefaultOnboardingData = () => ({
     hue: 220,
@@ -24,7 +36,7 @@ const createDefaultOnboardingData = () => ({
     reaction: "sparkles",
 });
 
-const normalizeSelectedTraits = (traits) => normalizeTraits(traits, traitOptions, 6);
+const normalizeSelectedTraits = (traits) => normalizeTraits(traits, traitOptions, traitOptions.length);
 
 const normalizeSelectedReaction = (reaction, fallback = "sparkles", allowNumeric = true) => {
     return normalizeReaction(reaction, reactionOptions, fallback, allowNumeric);
@@ -90,7 +102,7 @@ export const useOnboarding = () => {
             return;
         }
 
-        selectedTraits.value = [...selectedTraits.value, trait].slice(0, 6);
+        selectedTraits.value = [...selectedTraits.value, trait].slice(0, traitOptions.length);
     };
 
     const updateQuestionAnswer = ({ key, value }) => {
@@ -107,12 +119,7 @@ export const useOnboarding = () => {
     const applyStateData = (data = {}) => {
         onboardingData.value = normalizeOnboardingData(data);
         selectedTraits.value = normalizeSelectedTraits(data.traits ?? data.selectedTraits);
-        questionAnswers.value = {
-            reservedOpen: clampUnit(data.questionAnswers?.reservedOpen, 0.5, 2),
-            calmAssertive: clampUnit(data.questionAnswers?.calmAssertive, 0.5, 2),
-            rationalEmotional: clampUnit(data.questionAnswers?.rationalEmotional, 0.5, 2),
-            groundedCreative: clampUnit(data.questionAnswers?.groundedCreative, 0.5, 2),
-        };
+        questionAnswers.value = normalizeQuestionAnswers(data.questionAnswers);
 
         hueOverride.value = Boolean(data.hueOverride ?? (onboardingData.value.hue !== onboardingData.value.assignedHue));
         updateAssignedProfile();
@@ -126,12 +133,10 @@ export const useOnboarding = () => {
         activity: onboardingData.value.activity,
         reaction: onboardingData.value.reaction,
         traits: [...selectedTraits.value],
-        questionAnswers: {
-            reservedOpen: questionAnswers.value.reservedOpen,
-            calmAssertive: questionAnswers.value.calmAssertive,
-            rationalEmotional: questionAnswers.value.rationalEmotional,
-            groundedCreative: questionAnswers.value.groundedCreative,
-        },
+        questionAnswers: sliderOptions.reduce((answers, sliderOption) => {
+            answers[sliderOption.key] = questionAnswers.value[sliderOption.key];
+            return answers;
+        }, {}),
         hueOverride: hueOverride.value,
     });
 
@@ -222,6 +227,7 @@ export const useOnboarding = () => {
         onboardingSaving,
         onboardingStep,
         totalOnboardingSteps: TOTAL_ONBOARDING_STEPS,
+        sliderOptions,
         traitOptions,
         selectedTraits,
         questionAnswers,
