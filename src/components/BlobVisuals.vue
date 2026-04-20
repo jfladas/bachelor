@@ -56,7 +56,7 @@ const props = defineProps({
 
 const dev = false; // dev mode shows physics bodies and outlines for debugging
 
-defineEmits(["start-drag", "activate-companion"]);
+defineEmits(["start-drag", "open-menu", "open-sec-menu"]);
 </script>
 
 <template>
@@ -64,11 +64,11 @@ defineEmits(["start-drag", "activate-companion"]);
         :class="[{ active: props.isActive }, `state-${props.companionState}`]">
         <svg class="blob-overlay" aria-hidden="true">
             <path :ref="props.blobAreaRef" class="blob-area" :class="{ grabbing: props.grabbing, dev: dev }"
-                :d="props.blobPath" @mousedown="$emit('start-drag', $event)"
-                @click.stop="$emit('activate-companion')" />
+                :d="props.blobPath" @mousedown="$emit('start-drag', $event)" @click.stop="$emit('open-menu')"
+                @contextmenu.prevent.stop="$emit('open-sec-menu', $event)" />
             <path :ref="props.blobEdgeRef" class="blob-edge" :class="{ dev: dev }" :d="props.blobPath"
                 :style="{ strokeWidth: `${props.edgeWidth}px` }" @mousedown="$emit('start-drag', $event)"
-                @click.stop="$emit('activate-companion')" />
+                @click.stop="$emit('open-menu')" @contextmenu.prevent.stop="$emit('open-sec-menu', $event)" />
         </svg>
 
         <div v-if="!dev" class="face" :style="props.faceStyle">

@@ -90,6 +90,7 @@ const {
 const menuOpen = ref(false);
 const journalOpen = ref(false);
 const journalPanelSide = ref(null);
+const secMenuOpen = ref(false);
 
 let idleStateTimeoutId;
 
@@ -202,25 +203,32 @@ const setCompanionMenuState = (isOpen) => {
     setManualState(isOpen ? COMPANION_STATES.ACTIVE : null);
 };
 
+const syncCompanionMenuState = () => {
+    setCompanionMenuState(menuOpen.value || journalOpen.value || secMenuOpen.value);
+};
+
 const closeMenu = ({ clearDraft = false } = {}) => {
     menuOpen.value = false;
     journalOpen.value = false;
     journalPanelSide.value = null;
-    setCompanionMenuState(false);
+    secMenuOpen.value = false;
+    syncCompanionMenuState();
 
     if (clearDraft) {
         resetDraft();
     }
 };
 
-const activateCompanion = () => {
+const openMenu = () => {
     if (didDragRecently()) {
         return;
     }
 
+    secMenuOpen.value = false;
+
     if (!menuOpen.value) {
         menuOpen.value = true;
-        setCompanionMenuState(true);
+        syncCompanionMenuState();
         return;
     }
 
@@ -235,7 +243,20 @@ const openJournal = () => {
 
     menuOpen.value = true;
     journalOpen.value = true;
-    setCompanionMenuState(true);
+    secMenuOpen.value = false;
+    syncCompanionMenuState();
+};
+
+const openSecMenu = () => {
+    if (didDragRecently()) {
+        return;
+    }
+
+    menuOpen.value = false;
+    journalOpen.value = false;
+    journalPanelSide.value = null;
+    secMenuOpen.value = true;
+    syncCompanionMenuState();
 };
 
 const sendCompanionToSleep = () => {
@@ -245,6 +266,11 @@ const sendCompanionToSleep = () => {
 
 const openSettings = () => {
     // Placeholder until settings UI is implemented.
+};
+
+const quitApplication = () => {
+    closeMenu({ clearDraft: true });
+    ipcRenderer?.send?.("quit-app");
 };
 
 const submitJournal = (entryOptions = {}) => {
@@ -276,7 +302,7 @@ watch(grabbing, (isGrabbing) => {
 });
 
 watch(
-    () => menuOpen.value || journalOpen.value,
+    () => menuOpen.value || journalOpen.value || secMenuOpen.value,
     (isInteractive) => {
         setInteractionLocked(isInteractive);
     },
@@ -299,14 +325,17 @@ onBeforeUnmount(() => {
         <BlobVisuals :hue-variables="hueVariables" :blob-path="blobPath" :edge-width="EDGE_WIDTH" :grabbing="grabbing"
             :face-style="faceStyle" :outline-points="outlinePoints" :positions="positions" :eyes-src="eyesDefaultImage"
             :mouth-src="mouthDefaultImage" :blob-area-ref="setBlobAreaRef" :blob-edge-ref="setBlobEdgeRef"
-            :is-active="menuOpen || journalOpen" :companion-state="companionState" @start-drag="startDrag"
-            @activate-companion="activateCompanion" />
+            :is-active="menuOpen || journalOpen || secMenuOpen" :companion-state="companionState"
+            @start-drag="startDrag" @open-menu="openMenu" @open-sec-menu="openSecMenu" />
 
-        <button v-if="menuOpen || journalOpen" class="menu-backdrop" aria-label="Close companion menu"
+        <button v-if="menuOpen || journalOpen || secMenuOpen" class="menu-backdrop" aria-label="Close companion menu"
             @click="closeMenu" tabindex="-1" />
 
         <RadialMenu :visible="menuOpen && Boolean(companionCenter)" :anchor-style="menuAnchorStyle"
             @open-journal="openJournal" @sleep="sendCompanionToSleep" @settings="openSettings" />
+
+        <RadialMenu :visible="secMenuOpen && Boolean(companionCenter)" :anchor-style="menuAnchorStyle" mode="secondary"
+            @quit="quitApplication" />
 
         <MicroJournal :visible="journalOpen" :panel-style="panelStyle" :prompt="activePrompt"
             :emotion-tags="emotionTags" :selected-emotion="selectedEmotion" :text-value="journalText"
