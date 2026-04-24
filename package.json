@@ -1,5 +1,5 @@
 {
-  "name": "my-self-companion",
+  "name": "bachelor",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -23,8 +23,8 @@
   },
   "main": "electron/main.cjs",
   "build": {
-    "appId": "com.yourname.my-self-companion",
-    "productName": "My Self Companion",
+    "appId": "com.yourname.bachelor",
+    "productName": "Bachelor",
     "directories": {
       "buildResources": "public",
       "output": "dist_electron"

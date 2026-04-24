@@ -6,8 +6,8 @@ Use this guide before and during feature work to keep the current clean boundari
 
 - Renderer shell lives in src/App.vue and should stay thin.
 - Onboarding state, orchestration, and IPC sync belong in src/composables/useOnboarding.js.
-- Companion physics, drag, hover, and animation lifecycle belong in src/composables/usePhysicsBlob.js.
-- Companion rendering belongs in src/components/BlobVisuals.vue.
+- Blob physics, drag, hover, and animation lifecycle belong in src/composables/usePhysicsBlob.js.
+- Blob rendering belongs in src/components/BlobVisuals.vue.
 - Shared pure logic belongs in src/utils/\*.js.
 - Shared option lists and static config belong in src/constants/\*.js.
 - Archived or experimental components belong in src/components/archive/.
@@ -30,7 +30,7 @@ Use this guide before and during feature work to keep the current clean boundari
 
 ### 2) Choose file ownership
 
-- [ ] New UI markup does not inflate App.vue or Companion.vue unnecessarily.
+- [ ] New UI markup does not inflate App.vue or Blob.vue unnecessarily.
 - [ ] Complex side effects are moved into a composable.
 - [ ] Reusable transforms are extracted into src/utils/.
 - [ ] Duplicated literals are moved to src/constants/.

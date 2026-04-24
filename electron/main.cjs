@@ -306,7 +306,6 @@ app.whenReady().then(async () => {
         },
     });
 
-    // Keep the companion above other windows, including fullscreen apps.
     mainWindow.setAlwaysOnTop(true, "screen-saver");
     mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     mainWindow.setSkipTaskbar(true);
@@ -370,7 +369,7 @@ app.whenReady().then(async () => {
         }
 
         tray = new Tray(trayIcon);
-        tray.setToolTip("Desktop Companion");
+        tray.setToolTip("Bachelor");
         const trayMenuTemplate = [
             {
                 label: "Show",

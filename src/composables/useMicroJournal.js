@@ -1,7 +1,7 @@
 import { computed, ref } from "vue";
 import { journalEmotions, journalPromptsGeneric, journalPromptsByEmotion } from "../constants/microJournalOptions";
 
-const ENTRIES_STORAGE_KEY = "desktop-companion:micro-journal";
+const ENTRIES_STORAGE_KEY = "bachelor:micro-journal";
 const MAX_ENTRY_LENGTH = 600;
 const MAX_STORED_ENTRIES = 80;
 

@@ -11,7 +11,7 @@ const PETTING_SCALE = 0.7;
 const PETTING_LERP = 0.03;
 const CENTER_LERP_MIN = 0.1;
 const CENTER_LERP_MAX = 0.7;
-export const COMPANION_STATES = {
+export const STATES = {
     IDLE: "idle",
     ENGAGED: "engaged",
     ACTIVE: "active",
@@ -19,7 +19,7 @@ export const COMPANION_STATES = {
 };
 const BASE_NUDGE_INTERVAL_MS = 1500;
 const BASE_NUDGE_VELOCITY = 0.5;
-const POSITION_STORAGE_KEY = "desktop-companion:blob-center";
+const POSITION_STORAGE_KEY = "bachelor:blob-center";
 const PERSIST_INTERVAL_MS = 500;
 
 const randomBetween = (min, max) => min + Math.random() * (max - min);
@@ -32,8 +32,8 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
     const blobArea = ref(null);
     const blobEdge = ref(null);
     const smoothBlobCenter = ref(null);
-    const companionState = ref(COMPANION_STATES.IDLE);
-    const manualCompanionState = ref(null);
+    const state = ref(STATES.IDLE);
+    const manualState = ref(null);
 
     let engine;
     let runner;
@@ -97,7 +97,7 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
         };
     };
 
-    const saveCompanionPosition = () => {
+    const savePosition = () => {
         const center = getBallClusterCenter();
         if (!center) {
             return;
@@ -113,7 +113,7 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
         window.localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(payload));
     };
 
-    const getSavedCompanionCenter = () => {
+    const getSavedCenter = () => {
         try {
             const raw = window.localStorage.getItem(POSITION_STORAGE_KEY);
             if (!raw) {
@@ -530,12 +530,12 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
         World.add(engine.world, walls);
     };
 
-    const getCompanionState = () => {
+    const getState = () => {
         if (grabbing.value || cursorInsideBlob) {
-            return COMPANION_STATES.ENGAGED;
+            return STATES.ENGAGED;
         }
 
-        return COMPANION_STATES.IDLE;
+        return STATES.IDLE;
     };
 
     const scheduleNextNudge = (now = Date.now()) => {
@@ -546,13 +546,13 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
         nextIdleNudgeAt = now + delayMs;
     };
 
-    const setCompanionState = (nextState, now = Date.now()) => {
-        if (companionState.value === nextState) {
+    const setState = (nextState, now = Date.now()) => {
+        if (state.value === nextState) {
             return;
         }
 
-        companionState.value = nextState;
-        if (nextState === COMPANION_STATES.IDLE) {
+        state.value = nextState;
+        if (nextState === STATES.IDLE) {
             scheduleNextNudge(now);
             return;
         }
@@ -560,25 +560,25 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
         nextIdleNudgeAt = 0;
     };
 
-    const syncCompanionState = (now = Date.now()) => {
-        if (manualCompanionState.value) {
-            setCompanionState(manualCompanionState.value, now);
+    const syncState = (now = Date.now()) => {
+        if (manualState.value) {
+            setState(manualState.value, now);
             return;
         }
 
-        const derivedState = getCompanionState();
-        setCompanionState(derivedState, now);
+        const derivedState = getState();
+        setState(derivedState, now);
     };
 
     const setManualState = (nextState = null) => {
-        const validStates = Object.values(COMPANION_STATES);
+        const validStates = Object.values(STATES);
 
         if (nextState !== null && !validStates.includes(nextState)) {
             return;
         }
 
-        manualCompanionState.value = nextState;
-        syncCompanionState();
+        manualState.value = nextState;
+        syncState();
     };
 
     const didDragRecently = (windowMs = 180) => {
@@ -607,7 +607,7 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
     };
 
     const applyIdleMovement = (now = Date.now()) => {
-        if (companionState.value !== COMPANION_STATES.IDLE || ballBodies.length === 0) {
+        if (state.value !== STATES.IDLE || ballBodies.length === 0) {
             return;
         }
 
@@ -739,7 +739,7 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
         const insideBlobBand = isPointInBlob(blobEdge.value, x, y, "stroke");
 
         cursorInsideBlob = insideBlobFill || insideBlobBand;
-        syncCompanionState();
+        syncState();
 
         const shouldIgnoreMouseEvents = interactionLocked ? false : grabbing.value ? false : !cursorInsideBlob;
         sendIgnoreMouseEvents(shouldIgnoreMouseEvents);
@@ -805,7 +805,7 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
 
             separateOverlappingBalls();
             syncBallPositions();
-            saveCompanionPosition();
+            savePosition();
         }
     };
 
@@ -821,14 +821,14 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
 
     const animate = () => {
         const now = Date.now();
-        syncCompanionState(now);
+        syncState(now);
         applyIdleMovement(now);
         updateHoverBallScale();
         separateOverlappingBalls();
         clampBallVelocities();
         syncBallPositions();
         if (now - lastPersist >= PERSIST_INTERVAL_MS) {
-            saveCompanionPosition();
+            savePosition();
             lastPersist = now;
         }
         updateSmoothBlobCenter();
@@ -843,7 +843,7 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
 
         const { width, height } = getViewportBounds();
         lastViewportBounds = { width, height };
-        const savedCenter = getSavedCompanionCenter();
+        const savedCenter = getSavedCenter();
         const centerX = savedCenter?.x ?? width / 2;
         const centerY = savedCenter?.y ?? height / 2;
         ballBodies = createBallBodies(centerX, centerY);
@@ -875,8 +875,8 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
 
         lastAvailableScreenSize = getAvailableScreenSize();
         availableSizePollId = window.setInterval(onAvailableScreenSizeChange, 300);
-        syncCompanionState();
-        saveCompanionPosition();
+        syncState();
+        savePosition();
         animate();
     });
 
@@ -897,7 +897,7 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
             availableSizePollId = undefined;
         }
 
-        saveCompanionPosition();
+        savePosition();
 
         if (animationFrameId) {
             window.cancelAnimationFrame(animationFrameId);
@@ -915,7 +915,7 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
         activeBody = null;
         cursorInsideBlob = false;
         mousePosition = { x: 0, y: 0 };
-        manualCompanionState.value = null;
+        manualState.value = null;
         lastDragMoveAt = 0;
         interactionLocked = false;
         ballScaleFactors = [];
@@ -928,7 +928,7 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
     return {
         positions,
         grabbing,
-        companionState,
+        state,
         outlinePoints,
         blobPath,
         faceStyle,

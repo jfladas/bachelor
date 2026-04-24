@@ -48,7 +48,7 @@ const isCurrentStep = (currentValue, stepValue) => {
         <h1 class="title">Represent yourself</h1>
         <p class="description">
             Adjust the sliders and choose traits to reflect your personality.
-            This will impact the appearance and behavior of your companion.
+            This will impact the appearance and behavior of your blob.
             You can always change these later.
         </p>
 

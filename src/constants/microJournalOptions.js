@@ -158,5 +158,4 @@ export const journalPromptsByEmotion = {
     ],
 };
 
-// Fallback prompts (all prompts for backwards compatibility)
 export const journalPrompts = journalPromptsGeneric;

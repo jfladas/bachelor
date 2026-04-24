@@ -34,7 +34,7 @@ defineEmits(["open-journal", "sleep", "settings", "quit"]);
                         </svg>
                     </Button>
 
-                    <Button variant="secondary" class="menu-button button-sleep" aria-label="Send companion to sleep"
+                    <Button variant="secondary" class="menu-button button-sleep" aria-label="Send to sleep"
                         data-tooltip="Send to Sleep" @click.stop="$emit('sleep')">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-4">
                             <path

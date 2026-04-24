@@ -1,5 +1,5 @@
 <script setup>
-import Companion from "./components/Companion.vue";
+import Blob from "./components/Blob.vue";
 import Button from "./components/Button.vue";
 import StepColor from "./components/onboarding/StepColor.vue";
 import StepIntro from "./components/onboarding/StepIntro.vue";
@@ -31,7 +31,7 @@ const {
 </script>
 
 <template>
-  <Companion v-if="onboardingLoaded && onboardingCompleted" :onboarding-data="onboardingData" />
+  <Blob v-if="onboardingLoaded && onboardingCompleted" :onboarding-data="onboardingData" />
 
   <div v-else-if="onboardingLoaded && !onboardingCompleted" class="onboarding-shell" :style="hueVariables">
     <main class="window" @mouseenter="setOnboardingPopupInteractive(true)"
@@ -42,7 +42,7 @@ const {
             d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
         </svg>
       </Button>
-      <p class="eyebrow">My Self Companion</p>
+      <p class="eyebrow">Bachelor</p>
 
       <div class="progress" aria-label="Onboarding progress">
         <span v-for="dot in totalOnboardingSteps" :key="dot" class="progress-item">

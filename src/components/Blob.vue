@@ -5,7 +5,7 @@ import RadialMenu from "./RadialMenu.vue";
 import MicroJournal from "./MicroJournal.vue";
 import eyesDefaultImage from "../assets/face/eyes_default.svg";
 import mouthDefaultImage from "../assets/face/mouth_default.svg";
-import { COMPANION_STATES, usePhysicsBlob } from "../composables/usePhysicsBlob";
+import { STATES, usePhysicsBlob } from "../composables/usePhysicsBlob";
 import { useMicroJournal } from "../composables/useMicroJournal";
 import { createHueVariables } from "../utils/themeColors";
 import { clampHue, clampUnit } from "../utils/validation";
@@ -56,7 +56,7 @@ const hueVariables = computed(() => createHueVariables(hue.value));
 const {
     positions,
     grabbing,
-    companionState,
+    state,
     outlinePoints,
     blobPath,
     faceStyle,
@@ -107,7 +107,7 @@ const getViewportBounds = () => {
     };
 };
 
-const companionCenter = computed(() => {
+const blobCenter = computed(() => {
     if (positions.value.length === 0) {
         return null;
     }
@@ -132,7 +132,7 @@ const menuAnchorStyle = computed(() => {
     const maxX = Math.max(safeRadius, width - safeRadius);
     const maxY = Math.max(safeRadius, height);
 
-    if (!companionCenter.value) {
+    if (!blobCenter.value) {
         return {
             left: "-9999px",
             top: "-9999px",
@@ -140,8 +140,8 @@ const menuAnchorStyle = computed(() => {
     }
 
     return {
-        left: `${clamp(companionCenter.value.x, safeRadius, maxX)}px`,
-        top: `${clamp(companionCenter.value.y, 0, maxY)}px`,
+        left: `${clamp(blobCenter.value.x, safeRadius, maxX)}px`,
+        top: `${clamp(blobCenter.value.y, 0, maxY)}px`,
     };
 });
 
@@ -152,11 +152,11 @@ const getJournalPanelSide = () => {
         return journalPanelSide.value;
     }
 
-    if (!companionCenter.value) {
+    if (!blobCenter.value) {
         return "left";
     }
 
-    return companionCenter.value.x < width / 2 ? "left" : "right";
+    return blobCenter.value.x < width / 2 ? "left" : "right";
 };
 
 const panelStyle = computed(() => {
@@ -168,7 +168,7 @@ const panelStyle = computed(() => {
     const maxInset = Math.max(minInset, width - panelWidth - minInset);
     const side = getJournalPanelSide();
 
-    if (!companionCenter.value) {
+    if (!blobCenter.value) {
         return side === "left"
             ? {
                 left: `${minInset}px`,
@@ -182,11 +182,11 @@ const panelStyle = computed(() => {
             };
     }
 
-    const companionX = companionCenter.value.x;
+    const blobX = blobCenter.value.x;
 
     if (side === "left") {
         return {
-            left: `${clamp(companionX + sideOffset, minInset, maxInset)}px`,
+            left: `${clamp(blobX + sideOffset, minInset, maxInset)}px`,
             right: "auto",
             bottom: `${bottomOffset}px`,
         };
@@ -194,17 +194,17 @@ const panelStyle = computed(() => {
 
     return {
         left: "auto",
-        right: `${clamp(width - companionX + sideOffset, minInset, maxInset)}px`,
+        right: `${clamp(width - blobX + sideOffset, minInset, maxInset)}px`,
         bottom: `${bottomOffset}px`,
     };
 });
 
-const setCompanionMenuState = (isOpen) => {
-    setManualState(isOpen ? COMPANION_STATES.ACTIVE : null);
+const setMenuState = (isOpen) => {
+    setManualState(isOpen ? STATES.ACTIVE : null);
 };
 
-const syncCompanionMenuState = () => {
-    setCompanionMenuState(menuOpen.value || journalOpen.value || secMenuOpen.value);
+const syncMenuState = () => {
+    setMenuState(menuOpen.value || journalOpen.value || secMenuOpen.value);
 };
 
 const closeMenu = ({ clearDraft = false } = {}) => {
@@ -212,7 +212,7 @@ const closeMenu = ({ clearDraft = false } = {}) => {
     journalOpen.value = false;
     journalPanelSide.value = null;
     secMenuOpen.value = false;
-    syncCompanionMenuState();
+    syncMenuState();
 
     if (clearDraft) {
         resetDraft();
@@ -228,7 +228,7 @@ const openMenu = () => {
 
     if (!menuOpen.value) {
         menuOpen.value = true;
-        syncCompanionMenuState();
+        syncMenuState();
         return;
     }
 
@@ -239,12 +239,12 @@ const openMenu = () => {
 
 const openJournal = () => {
     const { width } = getViewportBounds();
-    journalPanelSide.value = !companionCenter.value || companionCenter.value.x < width / 2 ? "left" : "right";
+    journalPanelSide.value = !blobCenter.value || blobCenter.value.x < width / 2 ? "left" : "right";
 
     menuOpen.value = true;
     journalOpen.value = true;
     secMenuOpen.value = false;
-    syncCompanionMenuState();
+    syncMenuState();
 };
 
 const openSecMenu = () => {
@@ -256,10 +256,10 @@ const openSecMenu = () => {
     journalOpen.value = false;
     journalPanelSide.value = null;
     secMenuOpen.value = true;
-    syncCompanionMenuState();
+    syncMenuState();
 };
 
-const sendCompanionToSleep = () => {
+const sendToSleep = () => {
     closeMenu();
     ipcRenderer?.send?.("hide-app");
 };
@@ -282,7 +282,7 @@ const submitJournal = (entryOptions = {}) => {
     playMiniCelebrate();
     closeMenu();
 
-    setManualState(COMPANION_STATES.IDLE);
+    setManualState(STATES.IDLE);
     if (idleStateTimeoutId) {
         window.clearTimeout(idleStateTimeoutId);
     }
@@ -316,25 +316,25 @@ onBeforeUnmount(() => {
     }
 
     setInteractionLocked(false);
-    setCompanionMenuState(false);
+    setMenuState(false);
 });
 </script>
 
 <template>
-    <div class="companion-shell" :style="hueVariables">
+    <div class="shell" :style="hueVariables">
         <BlobVisuals :hue-variables="hueVariables" :blob-path="blobPath" :edge-width="EDGE_WIDTH" :grabbing="grabbing"
             :face-style="faceStyle" :outline-points="outlinePoints" :positions="positions" :eyes-src="eyesDefaultImage"
             :mouth-src="mouthDefaultImage" :blob-area-ref="setBlobAreaRef" :blob-edge-ref="setBlobEdgeRef"
-            :is-active="menuOpen || journalOpen || secMenuOpen" :companion-state="companionState"
-            @start-drag="startDrag" @open-menu="openMenu" @open-sec-menu="openSecMenu" />
+            :is-active="menuOpen || journalOpen || secMenuOpen" :state="state" @start-drag="startDrag"
+            @open-menu="openMenu" @open-sec-menu="openSecMenu" />
 
-        <button v-if="menuOpen || journalOpen || secMenuOpen" class="menu-backdrop" aria-label="Close companion menu"
+        <button v-if="menuOpen || journalOpen || secMenuOpen" class="menu-backdrop" aria-label="Close menu"
             @click="closeMenu" tabindex="-1" />
 
-        <RadialMenu :visible="menuOpen && Boolean(companionCenter)" :anchor-style="menuAnchorStyle"
-            @open-journal="openJournal" @sleep="sendCompanionToSleep" @settings="openSettings" />
+        <RadialMenu :visible="menuOpen && Boolean(blobCenter)" :anchor-style="menuAnchorStyle"
+            @open-journal="openJournal" @sleep="sendToSleep" @settings="openSettings" />
 
-        <RadialMenu :visible="secMenuOpen && Boolean(companionCenter)" :anchor-style="menuAnchorStyle" mode="secondary"
+        <RadialMenu :visible="secMenuOpen && Boolean(blobCenter)" :anchor-style="menuAnchorStyle" mode="secondary"
             @quit="quitApplication" />
 
         <MicroJournal :visible="journalOpen" :panel-style="panelStyle" :prompt="activePrompt"
@@ -345,7 +345,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.companion-shell {
+.shell {
 
     position: fixed;
     inset: 0;

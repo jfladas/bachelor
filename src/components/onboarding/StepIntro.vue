@@ -1,6 +1,6 @@
 <template>
     <section>
-        <h1 class="title">Meet your Self Companion</h1>
+        <h1 class="title">Meet your Blob</h1>
         <div class="boxes">
             <div class="box">
                 <div class="box-left">
@@ -11,7 +11,7 @@
                 </div>
                 <div class="box-right">
                     <h2>Not a tool</h2>
-                    <p>just a companion</p>
+                    <p>just a presence</p>
                 </div>
             </div>
 

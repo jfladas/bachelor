@@ -48,7 +48,7 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
-    companionState: {
+    state: {
         type: String,
         default: "idle",
     },
@@ -60,8 +60,7 @@ defineEmits(["start-drag", "open-menu", "open-sec-menu"]);
 </script>
 
 <template>
-    <div class="root" :style="props.hueVariables"
-        :class="[{ active: props.isActive }, `state-${props.companionState}`]">
+    <div class="root" :style="props.hueVariables" :class="[{ active: props.isActive }, `state-${props.state}`]">
         <svg class="blob-overlay" aria-hidden="true">
             <path :ref="props.blobAreaRef" class="blob-area" :class="{ grabbing: props.grabbing, dev: dev }"
                 :d="props.blobPath" @mousedown="$emit('start-drag', $event)" @click.stop="$emit('open-menu')"
