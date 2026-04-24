@@ -110,10 +110,53 @@ export const journalEmotions = [
     { id: "angry", label: "Angry", svg: angryFaceSvg },
 ];
 
-export const journalPrompts = [
-    "What made you smile today?",
-    "What are you grateful for right now?",
-    "What's something good that happened recently?",
-    "What is a small win you had today?",
-    "What is something you're looking forward to?",
+// Generic prompts when no emotion is selected
+export const journalPromptsGeneric = [
+    "What's on your mind?",
+    "How was your day?",
+    "What caught your attention today?",
+    "Anything you'd like to reflect on?",
+    "What matters most right now?",
 ];
+
+// Emotion-specific prompts
+export const journalPromptsByEmotion = {
+    excited: [
+        "What made you smile today?",
+        "What are you excited about?",
+        "What's something good that happened recently?",
+        "What is a small win you had today?",
+        "What are you looking forward to?",
+    ],
+    content: [
+        "What made you feel peaceful today?",
+        "What are you grateful for right now?",
+        "What's something that brings you joy?",
+        "What can you appreciate about today?",
+        "What's making you feel satisfied?",
+    ],
+    anxious: [
+        "What's weighing on your mind?",
+        "What would help you feel calmer?",
+        "What are you worried about?",
+        "What do you need right now?",
+        "What's one small thing you can control?",
+    ],
+    sad: [
+        "What's hurting right now?",
+        "How are you feeling about this?",
+        "What do you need to express?",
+        "What would help you feel better?",
+        "Who or what do you miss?",
+    ],
+    angry: [
+        "What's frustrating you?",
+        "What do you need to get off your chest?",
+        "What would help you feel heard?",
+        "What needs to change?",
+        "How can you channel this energy?",
+    ],
+};
+
+// Fallback prompts (all prompts for backwards compatibility)
+export const journalPrompts = journalPromptsGeneric;

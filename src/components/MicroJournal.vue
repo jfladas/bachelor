@@ -40,7 +40,8 @@ const props = defineProps({
 const emit = defineEmits(["close", "rotate-prompt", "select-emotion", "update:text", "submit"]);
 
 const showPrompt = ref(false);
-const showEmotion = ref(false);
+const showEmotion = ref(true);
+const showText = ref(true);
 
 const showPromptSection = () => {
     showPrompt.value = true;
@@ -62,10 +63,20 @@ const hideEmotionSection = () => {
     showEmotion.value = false;
 };
 
+const showTextSection = () => {
+    showText.value = true;
+};
+
+const hideTextSection = () => {
+    emit("update:text", "");
+    showText.value = false;
+};
+
 const handleSubmit = () => {
     emit("submit", {
         includePrompt: showPrompt.value,
         includeEmotion: showEmotion.value,
+        includeText: showText.value,
     });
 };
 
@@ -77,7 +88,8 @@ watch(
         }
 
         showPrompt.value = false;
-        showEmotion.value = false;
+        showEmotion.value = true;
+        showText.value = true;
     }
 );
 
@@ -96,13 +108,17 @@ watch(
             </Button>
         </header>
 
-        <div v-if="!showPrompt || !showEmotion" class="optional-actions">
+        <div v-if="!showPrompt || !showEmotion || !showText" class="optional-actions">
             <Button v-if="!showPrompt" variant="secondary" @click="showPromptSection">
-                Add prompt
+                Show prompt
             </Button>
 
             <Button v-if="!showEmotion" variant="secondary" @click="showEmotionSection">
-                Add emotion
+                Show emotion
+            </Button>
+
+            <Button v-if="!showText" variant="secondary" @click="showTextSection">
+                Show text field
             </Button>
         </div>
 
@@ -146,13 +162,20 @@ watch(
             </div>
         </div>
 
-        <div class="subpanel">
+        <div v-if="showText" class="subpanel optional">
+            <button type="button" class="remove-option" aria-label="Remove entry field" @click="hideTextSection">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+                    <path
+                        d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
+                </svg>
+            </button>
             <label class="label" for="micro-journal-entry">Entry</label>
             <textarea id="micro-journal-entry" class="textarea" :value="props.textValue" :maxlength="props.maxLength"
-                placeholder="What's on your mind?" @input="$emit('update:text', $event.target.value)"
+                placeholder="Tell me something..." @input="$emit('update:text', $event.target.value)"
                 spellcheck="false" />
             <span class="char-count">{{ props.textValue.length }}/{{ props.maxLength }}</span>
         </div>
+
         <div class="actions">
             <Button variant="primary" class="save-button" :disabled="!props.canSubmit" @click="handleSubmit">
                 Submit
@@ -171,6 +194,7 @@ watch(
     z-index: 25;
     width: 30rem;
     height: auto;
+    padding-bottom: 6rem;
 }
 
 .subpanel {
@@ -290,7 +314,8 @@ watch(
     font-size: 1rem;
     padding: 0.8rem;
     line-height: 1.4;
-    margin-bottom: 4rem;
+    cursor: unset;
+    scrollbar-gutter: stable;
 }
 
 .textarea:focus-visible {
@@ -300,8 +325,8 @@ watch(
 
 .char-count {
     position: absolute;
-    right: 2.5rem;
-    bottom: 6.2rem;
+    right: 1rem;
+    bottom: 0.5rem;
     color: var(--text);
     font-size: 0.8rem;
 }

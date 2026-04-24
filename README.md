@@ -18,5 +18,4 @@ My Self Companion creates a continuous, subtle relationship with a digital repre
 ## Development
 
 - Start app (renderer + Electron): `npm run dev`
-- Build renderer: `npm run build:renderer`
 - Build packaged app: `npm run build`
