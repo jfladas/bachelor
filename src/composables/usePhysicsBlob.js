@@ -589,7 +589,7 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
         return Date.now() - lastDragMoveAt <= windowMs;
     };
 
-    const playMiniCelebrate = () => {
+    const jump = () => {
         if (ballBodies.length === 0) {
             return;
         }
@@ -938,6 +938,6 @@ export const usePhysicsBlob = ({ ballRadii, activity, ipcRenderer }) => {
         didDragRecently,
         setInteractionLocked,
         setManualState,
-        playMiniCelebrate,
+        jump,
     };
 };

@@ -3,9 +3,8 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import BlobVisuals from "./BlobVisuals.vue";
 import RadialMenu from "./RadialMenu.vue";
 import MicroJournal from "./MicroJournal.vue";
-import eyesDefaultImage from "../assets/face/eyes_default.svg";
-import mouthDefaultImage from "../assets/face/mouth_default.svg";
 import { STATES, usePhysicsBlob } from "../composables/usePhysicsBlob";
+import { useBlobFace } from "../composables/useBlobFace";
 import { useMicroJournal } from "../composables/useMicroJournal";
 import { createHueVariables } from "../utils/themeColors";
 import { clampHue, clampUnit } from "../utils/validation";
@@ -66,12 +65,14 @@ const {
     didDragRecently,
     setInteractionLocked,
     setManualState,
-    playMiniCelebrate,
+    jump,
 } = usePhysicsBlob({
     ballRadii,
     activity,
     ipcRenderer,
 });
+
+const { faceParts, setFaceEmotion } = useBlobFace();
 
 const {
     emotionTags,
@@ -91,8 +92,6 @@ const menuOpen = ref(false);
 const journalOpen = ref(false);
 const journalPanelSide = ref(null);
 const secMenuOpen = ref(false);
-
-let idleStateTimeoutId;
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
@@ -279,19 +278,21 @@ const submitJournal = (entryOptions = {}) => {
         return;
     }
 
-    playMiniCelebrate();
+    jump();
     closeMenu();
 
     setManualState(STATES.IDLE);
-    if (idleStateTimeoutId) {
-        window.clearTimeout(idleStateTimeoutId);
-    }
-
-    idleStateTimeoutId = window.setTimeout(() => {
-        setManualState(null);
-        idleStateTimeoutId = undefined;
-    }, 520);
 };
+
+watch(
+    selectedEmotion,
+    (emotionId) => {
+        if (emotionId) {
+            setFaceEmotion(emotionId);
+        }
+    },
+    { immediate: true }
+);
 
 watch(grabbing, (isGrabbing) => {
     if (!isGrabbing || !menuOpen.value) {
@@ -310,11 +311,6 @@ watch(
 );
 
 onBeforeUnmount(() => {
-    if (idleStateTimeoutId) {
-        window.clearTimeout(idleStateTimeoutId);
-        idleStateTimeoutId = undefined;
-    }
-
     setInteractionLocked(false);
     setMenuState(false);
 });
@@ -323,8 +319,8 @@ onBeforeUnmount(() => {
 <template>
     <div class="shell" :style="hueVariables">
         <BlobVisuals :hue-variables="hueVariables" :blob-path="blobPath" :edge-width="EDGE_WIDTH" :grabbing="grabbing"
-            :face-style="faceStyle" :outline-points="outlinePoints" :positions="positions" :eyes-src="eyesDefaultImage"
-            :mouth-src="mouthDefaultImage" :blob-area-ref="setBlobAreaRef" :blob-edge-ref="setBlobEdgeRef"
+            :face-style="faceStyle" :face-parts="faceParts" :outline-points="outlinePoints" :positions="positions"
+            :blob-area-ref="setBlobAreaRef" :blob-edge-ref="setBlobEdgeRef"
             :is-active="menuOpen || journalOpen || secMenuOpen" :state="state" @start-drag="startDrag"
             @open-menu="openMenu" @open-sec-menu="openSecMenu" />
 

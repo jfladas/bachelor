@@ -20,20 +20,16 @@ const props = defineProps({
         type: Object,
         required: true,
     },
+    faceParts: {
+        type: Object,
+        required: true,
+    },
     outlinePoints: {
         type: Array,
         required: true,
     },
     positions: {
         type: Array,
-        required: true,
-    },
-    eyesSrc: {
-        type: String,
-        required: true,
-    },
-    mouthSrc: {
-        type: String,
         required: true,
     },
     blobAreaRef: {
@@ -71,8 +67,12 @@ defineEmits(["start-drag", "open-menu", "open-sec-menu"]);
         </svg>
 
         <div v-if="!dev" class="face" :style="props.faceStyle">
-            <img class="face-eyes" :src="props.eyesSrc" alt="" />
-            <img class="face-mouth" :src="props.mouthSrc" alt="" />
+            <svg class="face-eyes" viewBox="0 0 363 180" aria-hidden="true">
+                <path v-for="(eyePath, index) in props.faceParts.eyes" :key="`eye-${index}`" :d="eyePath" />
+            </svg>
+            <svg class="face-mouth" viewBox="0 0 363 180" aria-hidden="true">
+                <path v-for="(mouthPath, index) in props.faceParts.mouth" :key="`mouth-${index}`" :d="mouthPath" />
+            </svg>
         </div>
 
         <svg v-if="dev" class="overlay" aria-hidden="true">
@@ -129,30 +129,33 @@ defineEmits(["start-drag", "open-menu", "open-sec-menu"]);
 }
 
 .face {
-    position: fixed;
-    transform: translate(-50%, -100%);
+    position: relative;
+    display: flex;
     pointer-events: none;
+    width: 4.5rem;
+    transform: translateX(-50%);
     z-index: 2;
     user-select: none;
 }
 
-.face-eyes,
+.face-eyes {
+    position: absolute;
+    transform: translateY(-175%);
+    pointer-events: none;
+    display: block;
+    overflow: visible;
+    fill: var(--white);
+    stroke: none;
+}
+
 .face-mouth {
     position: absolute;
-    left: 50%;
+    transform: translateY(-75%);
+    pointer-events: none;
     display: block;
-    height: auto;
-    transform: translateX(-50%);
-}
-
-.face-eyes {
-    width: 3.5rem;
-    bottom: 1.2rem;
-}
-
-.face-mouth {
-    width: 2.8rem;
-    bottom: -0.5rem;
+    overflow: visible;
+    fill: var(--white);
+    stroke: none;
 }
 
 .overlay {
