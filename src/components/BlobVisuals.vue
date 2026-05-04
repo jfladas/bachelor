@@ -24,6 +24,10 @@ const props = defineProps({
         type: Object,
         required: true,
     },
+    faceEyesStyle: {
+        type: Object,
+        default: () => ({}),
+    },
     outlinePoints: {
         type: Array,
         required: true,
@@ -67,7 +71,7 @@ defineEmits(["start-drag", "open-menu", "open-sec-menu"]);
         </svg>
 
         <div v-if="!dev" class="face" :style="props.faceStyle">
-            <svg class="face-eyes" viewBox="0 0 363 180" aria-hidden="true">
+            <svg class="face-eyes" viewBox="0 0 363 180" aria-hidden="true" :style="props.faceEyesStyle">
                 <path v-for="(eyePath, index) in props.faceParts.eyes" :key="`eye-${index}`" :d="eyePath" />
             </svg>
             <svg class="face-mouth" viewBox="0 0 363 180" aria-hidden="true">

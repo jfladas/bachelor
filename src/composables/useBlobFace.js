@@ -181,6 +181,13 @@ export const useBlobFace = () => {
     let blinkAnimationFrameId;
     let blinkTimeoutId;
     let isBlinking = false;
+    let currentPresetName = "default";
+    let followFrameId;
+    let isFollowing = false;
+    let followGetter = null;
+    let followPreviousPreset = null;
+    let followBaseEyes = null;
+    const eyesOffset = ref({ x: 0, y: 0 });
 
     const stopAnimation = () => {
         if (faceEyesFrameId) {
@@ -289,12 +296,47 @@ export const useBlobFace = () => {
         animateMouth(mouthPaths.value, mouth, 300);
     };
 
+    const startEyeFollow = (getOffset) => {
+        if (isFollowing || typeof getOffset !== "function") return;
+        isFollowing = true;
+        followBaseEyes = FACE_PRESETS.surprised.eyes;
+        followPreviousPreset = currentPresetName || "default";
+        setFace("surprised");
+
+        const loop = () => {
+            if (!isFollowing) return;
+            const offset = getOffset() || { x: 0, y: 0 };
+            const MAX_RADIUS = 12;
+            const distance = Math.hypot(offset.x, offset.y);
+            const scale = distance > 0 ? Math.min(1, 1 / distance) : 0;
+            const dx = offset.x * scale * MAX_RADIUS;
+            const dy = offset.y * scale * MAX_RADIUS;
+            eyesOffset.value = { x: dx, y: dy };
+            followFrameId = window.requestAnimationFrame(loop);
+        };
+
+        followFrameId = window.requestAnimationFrame(loop);
+    };
+
+    const stopEyeFollow = () => {
+        if (followFrameId) {
+            window.cancelAnimationFrame(followFrameId);
+            followFrameId = undefined;
+        }
+        isFollowing = false;
+        followGetter = null;
+        eyesOffset.value = { x: 0, y: 0 };
+        setFace(followPreviousPreset || "default");
+        followPreviousPreset = null;
+    };
+
     const setFace = (nextFace) => {
         if (!FACE_PRESETS[nextFace]) {
             nextFace = "default";
         }
 
         stopBlinkAnimation();
+        currentPresetName = nextFace;
         const target = FACE_PRESETS[nextFace];
         animateFace(target);
         scheduleNextBlink();
@@ -324,5 +366,8 @@ export const useBlobFace = () => {
         faceParts,
         setFace,
         setFaceEmotion,
+        startEyeFollow,
+        stopEyeFollow,
+        eyesOffset,
     };
 };

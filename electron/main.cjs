@@ -357,11 +357,12 @@ app.whenReady().then(async () => {
 
     showMainWindow();
 
-    // Keep onboarding clickable on first run; enable clickthrough only after onboarding.
     mainWindow.setIgnoreMouseEvents(initialOnboardingState.completed, { forward: true });
 
     try {
-        const trayIconPath = path.join(__dirname, "assets", "tray-icon.png");
+        const isWin = process.platform === 'win32';
+        const iconName = isWin ? 'icon.ico' : 'icon.png';
+        const trayIconPath = path.join(__dirname, "assets", iconName);
         let trayIcon = nativeImage.createFromPath(trayIconPath);
 
         if (trayIcon.isEmpty()) {

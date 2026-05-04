@@ -1,5 +1,5 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { useBlobState, STATES } from "../composables/useBlobState";
+import { useBlobState, STATES } from "./useBlobState";
 import { Engine, Runner, World, Bodies, Body, Constraint } from "matter-js";
 
 const CHAIN_GAP = 0;
@@ -560,6 +560,10 @@ export const useBlobPhysics = ({ ballRadii, activity, ipcRenderer }) => {
 
     const updateState = (now = Date.now()) => {
         const prev = blobState.getState();
+        if (prev === STATES.ACTIVE) {
+            return;
+        }
+
         const next = grabbing.value || cursorInsideBlob ? STATES.ENGAGED : STATES.IDLE;
         if (prev === next) return;
         blobState.setState(next);

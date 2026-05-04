@@ -1,10 +1,12 @@
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import BlobVisuals from "./BlobVisuals.vue";
 import RadialMenu from "./RadialMenu.vue";
 import MicroJournal from "./MicroJournal.vue";
-import { STATES, usePhysicsBlob } from "../composables/usePhysicsBlob";
+import { useBlobPhysics } from "../composables/useBlobPhysics";
+import { STATES } from "../composables/useBlobState";
 import { useBlobFace } from "../composables/useBlobFace";
+import { useBlobState } from "../composables/useBlobState";
 import { useMicroJournal } from "../composables/useMicroJournal";
 import { createHueVariables } from "../utils/themeColors";
 import { clampHue, clampUnit } from "../utils/validation";
@@ -64,15 +66,15 @@ const {
     startDrag,
     didDragRecently,
     setInteractionLocked,
-    setManualState,
     jump,
-} = usePhysicsBlob({
+} = useBlobPhysics({
     ballRadii,
     activity,
     ipcRenderer,
 });
 
-const { faceParts, setFaceEmotion } = useBlobFace();
+const { faceParts, setFaceEmotion, startEyeFollow, stopEyeFollow, eyesOffset } = useBlobFace();
+const blobState = useBlobState();
 
 const {
     emotionTags,
@@ -94,6 +96,16 @@ const journalPanelSide = ref(null);
 const secMenuOpen = ref(false);
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const mousePos = ref({ x: 0, y: 0 });
+
+const getCursorOffset = () => {
+    if (!blobCenter.value) return { x: 0, y: 0 };
+    return {
+        x: mousePos.value.x - blobCenter.value.x,
+        y: mousePos.value.y - blobCenter.value.y + 50,
+    };
+};
 
 const getViewportBounds = () => {
     if (typeof window === "undefined") {
@@ -199,7 +211,7 @@ const panelStyle = computed(() => {
 });
 
 const setMenuState = (isOpen) => {
-    setManualState(isOpen ? STATES.ACTIVE : null);
+    blobState.setState(isOpen ? STATES.ACTIVE : STATES.IDLE);
 };
 
 const syncMenuState = () => {
@@ -280,8 +292,7 @@ const submitJournal = (entryOptions = {}) => {
 
     jump();
     closeMenu();
-
-    setManualState(STATES.IDLE);
+    blobState.setState(STATES.IDLE);
 };
 
 watch(
@@ -293,6 +304,22 @@ watch(
     },
     { immediate: true }
 );
+
+watch(blobState.state, (next) => {
+    if (next === STATES.ENGAGED) {
+        startEyeFollow(getCursorOffset);
+        return;
+    }
+    stopEyeFollow();
+});
+
+onMounted(() => {
+    const onMove = (e) => {
+        mousePos.value = { x: e.clientX, y: e.clientY };
+    };
+    window.addEventListener("mousemove", onMove);
+    onBeforeUnmount(() => window.removeEventListener("mousemove", onMove));
+});
 
 watch(grabbing, (isGrabbing) => {
     if (!isGrabbing || !menuOpen.value) {
@@ -312,17 +339,18 @@ watch(
 
 onBeforeUnmount(() => {
     setInteractionLocked(false);
-    setMenuState(false);
+    blobState.setState(false);
 });
 </script>
 
 <template>
     <div class="shell" :style="hueVariables">
         <BlobVisuals :hue-variables="hueVariables" :blob-path="blobPath" :edge-width="EDGE_WIDTH" :grabbing="grabbing"
-            :face-style="faceStyle" :face-parts="faceParts" :outline-points="outlinePoints" :positions="positions"
-            :blob-area-ref="setBlobAreaRef" :blob-edge-ref="setBlobEdgeRef"
-            :is-active="menuOpen || journalOpen || secMenuOpen" :state="state" @start-drag="startDrag"
-            @open-menu="openMenu" @open-sec-menu="openSecMenu" />
+            :face-style="faceStyle" :face-parts="faceParts"
+            :face-eyes-style="{ transform: `translateY(-175%) translate(${eyesOffset.x}px, ${eyesOffset.y}px)`, transition: 'transform 0.3s ease' }"
+            :outline-points="outlinePoints" :positions="positions" :blob-area-ref="setBlobAreaRef"
+            :blob-edge-ref="setBlobEdgeRef" :is-active="menuOpen || journalOpen || secMenuOpen" @start-drag="startDrag"
+            @open-menu="openMenu" @open-sec-menu="openSecMenu" :state="blobState.state.value" />
 
         <button v-if="menuOpen || journalOpen || secMenuOpen" class="menu-backdrop" aria-label="Close menu"
             @click="closeMenu" tabindex="-1" />
