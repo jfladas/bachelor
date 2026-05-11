@@ -1,7 +1,7 @@
 import { computed, ref } from "vue";
 import { journalEmotions, journalPromptsGeneric, journalPromptsByEmotion } from "../constants/microJournalOptions";
+import { getElectronIPC } from "../utils/electronHelper";
 
-const ENTRIES_STORAGE_KEY = "bachelor:micro-journal";
 const MAX_ENTRY_LENGTH = 600;
 const MAX_STORED_ENTRIES = 80;
 
@@ -13,48 +13,6 @@ const sanitizeEntryText = (value) => {
     }
 
     return value.trim().slice(0, MAX_ENTRY_LENGTH);
-};
-
-const readStoredEntries = () => {
-    if (typeof window === "undefined" || !window.localStorage) {
-        return [];
-    }
-
-    try {
-        const raw = window.localStorage.getItem(ENTRIES_STORAGE_KEY);
-        if (!raw) {
-            return [];
-        }
-
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) {
-            return [];
-        }
-
-        return parsed
-            .map((entry) => ({
-                id: typeof entry?.id === "string" ? entry.id : createEntryId(),
-                text: sanitizeEntryText(entry?.text),
-                emotion: typeof entry?.emotion === "string" ? entry.emotion : null,
-                prompt: typeof entry?.prompt === "string" ? entry.prompt : null,
-                createdAt: typeof entry?.createdAt === "string" ? entry.createdAt : new Date().toISOString(),
-            }))
-            .filter((entry) => Boolean(entry.text || entry.emotion));
-    } catch {
-        return [];
-    }
-};
-
-const persistEntries = (entries) => {
-    if (typeof window === "undefined" || !window.localStorage) {
-        return;
-    }
-
-    try {
-        window.localStorage.setItem(ENTRIES_STORAGE_KEY, JSON.stringify(entries));
-    } catch {
-        // Local storage might be unavailable in some environments.
-    }
 };
 
 const getInitialPromptIndex = () => {
@@ -73,11 +31,64 @@ const getPromptsForEmotion = (emotionId) => {
     return journalPromptsByEmotion[emotionId];
 };
 
+let journalUnlocked = false;
+let cachedIPC = null;
+let lockStateListenerAttached = false;
+
+const mergeLoadedEntries = (metadataList, loadedEntries) => {
+    const loadedById = new Map((loadedEntries || []).map((entry) => [entry.id, entry]));
+    const isUnlocked = journalUnlocked;
+
+    return (metadataList || [])
+        .map((metadataEntry) => {
+            const loadedEntry = loadedById.get(metadataEntry.id) || {};
+            const isSecret = Boolean(metadataEntry.isSecret);
+
+            return {
+                id: metadataEntry.id,
+                createdAt: loadedEntry.createdAt || metadataEntry.createdAt,
+                updatedAt: loadedEntry.updatedAt || metadataEntry.updatedAt || null,
+                text: loadedEntry.text || "",
+                emotion: loadedEntry.emotion ?? metadataEntry.emotion ?? null,
+                prompt: loadedEntry.prompt ?? metadataEntry.prompt ?? null,
+                isSecret,
+                isLocked: isSecret && !isUnlocked,
+            };
+        })
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+};
+
+/**
+ * Get or wait for Electron IPC to be available
+ */
+async function getIPC() {
+    if (cachedIPC) {
+        return cachedIPC;
+    }
+
+    cachedIPC = await getElectronIPC();
+    return cachedIPC;
+}
+
+async function attachLockStateListener(ipc, loadEntries) {
+    if (lockStateListenerAttached || !ipc?.on) {
+        return;
+    }
+
+    lockStateListenerAttached = true;
+    ipc.on('journal:lock-state-changed', async (nextUnlocked) => {
+        journalUnlocked = Boolean(nextUnlocked);
+        loadEntries();
+    });
+}
+
 export const useMicroJournal = () => {
     const journalText = ref("");
     const selectedEmotion = ref("");
     const promptIndex = ref(getInitialPromptIndex());
-    const entries = ref(readStoredEntries());
+    const entries = ref([]);
+    const isUnlocked = ref(false);
+    const isSecret = ref(false);
 
     const activePrompt = computed(() => {
         const prompts = getPromptsForEmotion(selectedEmotion.value);
@@ -94,6 +105,105 @@ export const useMicroJournal = () => {
         const hasEmotion = Boolean(selectedEmotion.value);
         return hasText || hasEmotion;
     });
+
+    const initializeEncryption = async (password) => {
+        const ipc = await getIPC();
+
+        if (!ipc) {
+            return { success: false, error: 'Electron IPC not available' };
+        }
+
+        try {
+            const result = await ipc.invoke('journal:setup-password', password);
+            journalUnlocked = false;
+            isUnlocked.value = false;
+            await loadEntries();
+            return result;
+        } catch (error) {
+            console.error("Failed to initialize encryption:", error);
+            return { success: false, error: 'Setup failed' };
+        }
+    };
+
+    const unlockJournal = async (password) => {
+        const ipc = await getIPC();
+
+        if (!ipc) {
+            return { success: false, error: 'Electron IPC not available' };
+        }
+
+        try {
+            const result = await ipc.invoke('journal:verify-password', password);
+            if (!result.success) {
+                return { success: false, error: result.error || 'Unlock failed' };
+            }
+
+            journalUnlocked = true;
+            isUnlocked.value = true;
+            return { success: true };
+        } catch (error) {
+            console.error("Failed to unlock journal:", error);
+            return { success: false, error: 'Unlock failed' };
+        }
+    };
+
+    const refreshUnlockState = async () => {
+        const ipc = await getIPC();
+
+        if (!ipc) {
+            journalUnlocked = false;
+            return false;
+        }
+
+        try {
+            journalUnlocked = await ipc.invoke('journal:is-unlocked');
+            isUnlocked.value = journalUnlocked;
+            return journalUnlocked;
+        } catch (error) {
+            console.error("Failed to refresh unlock state:", error);
+            journalUnlocked = false;
+            return false;
+        }
+    };
+
+    const loadEntries = async () => {
+        const ipc = await getIPC();
+
+        if (!ipc) {
+            console.error("Electron IPC not available");
+            return;
+        }
+
+        try {
+            await attachLockStateListener(ipc, loadEntries);
+            await refreshUnlockState();
+
+            const [metadataEntries, loadedEntries] = await Promise.all([
+                ipc.invoke('journal:get-metadata'),
+                ipc.invoke('journal:load-entries'),
+            ]);
+
+            entries.value = mergeLoadedEntries(metadataEntries, loadedEntries);
+        } catch (error) {
+            console.error("Failed to load entries:", error);
+            entries.value = [];
+        }
+    };
+
+    const isPinProtected = async () => {
+        const ipc = await getIPC();
+
+        if (!ipc) {
+            return false;
+        }
+
+        try {
+            return await ipc.invoke('journal:is-password-protected');
+        } catch (error) {
+            console.error("Failed to check PIN status:", error);
+            return false;
+        }
+    };
 
     const setJournalText = (nextText) => {
         if (typeof nextText !== "string") {
@@ -137,7 +247,8 @@ export const useMicroJournal = () => {
         }
     };
 
-    const saveEntry = ({ includeEmotion = true, includePrompt = true, includeText = true } = {}) => {
+
+    const saveEntry = async ({ includeEmotion = true, includePrompt = true, includeText = true, isSecret: nextIsSecret = false } = {}) => {
         const text = includeText ? sanitizeEntryText(journalText.value) : "";
         const hasText = text.length > 0;
         const hasEmotion = includeEmotion && Boolean(selectedEmotion.value);
@@ -146,20 +257,75 @@ export const useMicroJournal = () => {
             return null;
         }
 
-        const entry = {
-            id: createEntryId(),
-            text: hasText ? text : "",
-            emotion: includeEmotion ? selectedEmotion.value || null : null,
-            prompt: includePrompt ? activePrompt.value || null : null,
-            createdAt: new Date().toISOString(),
-        };
+        const entryIsSecret = Boolean(nextIsSecret);
+        isSecret.value = entryIsSecret;
 
-        const nextEntries = [entry, ...entries.value].slice(0, MAX_STORED_ENTRIES);
-        entries.value = nextEntries;
-        persistEntries(nextEntries);
-        resetDraft({ rotatePromptAfterReset: true });
+        const ipc = await getIPC();
 
-        return entry;
+        if (!ipc) {
+            console.error("Electron IPC not available");
+            return null;
+        }
+
+        try {
+            const entry = {
+                id: createEntryId(),
+                text: hasText ? text : "",
+                emotion: includeEmotion ? selectedEmotion.value || null : null,
+                prompt: includePrompt ? activePrompt.value || null : null,
+                isSecret: entryIsSecret,
+                isLocked: entryIsSecret && !journalUnlocked,
+                createdAt: new Date().toISOString(),
+            };
+
+            const result = await ipc.invoke('journal:save-entry', entry);
+
+            if (!result?.success) {
+                return null;
+            }
+
+            const nextEntries = [entry, ...entries.value].slice(0, MAX_STORED_ENTRIES);
+            entries.value = nextEntries;
+            resetDraft({ rotatePromptAfterReset: true });
+            isSecret.value = false;
+
+            return entry;
+        } catch (error) {
+            console.error("Failed to save entry:", error);
+            return null;
+        }
+    };
+
+    /**
+     * Delete an encrypted entry
+     */
+    const deleteEntry = async (entryId) => {
+        const ipc = await getIPC();
+
+        if (!ipc) {
+            console.error("Electron IPC not available");
+            return false;
+        }
+
+        try {
+            await ipc.invoke('journal:delete-entry', entryId);
+            entries.value = entries.value.filter((e) => e.id !== entryId);
+            return true;
+        } catch (error) {
+            console.error("Failed to delete entry:", error);
+            return false;
+        }
+    };
+
+    const lockJournal = async () => {
+        const ipc = await getIPC();
+        try {
+            await ipc?.invoke('journal:lock');
+        } catch (error) {
+            console.error("Failed to lock journal:", error);
+        }
+        journalUnlocked = false;
+        isUnlocked.value = false;
     };
 
     return {
@@ -170,11 +336,21 @@ export const useMicroJournal = () => {
         activePrompt,
         entries,
         canSubmit,
+        isUnlocked,
+        isSecret,
         maxEntryLength: MAX_ENTRY_LENGTH,
         setJournalText,
         setEmotionTag,
         rotatePrompt,
         resetDraft,
         saveEntry,
+        deleteEntry,
+        loadEntries,
+        initializeEncryption,
+        unlockJournal,
+        refreshUnlockState,
+        isPinProtected,
+        lockJournal,
     };
 };
+

@@ -1,4 +1,5 @@
 <script setup>
+import { ref, onMounted, watch } from "vue";
 import Blob from "./components/Blob.vue";
 import Button from "./components/Button.vue";
 import StepColor from "./components/onboarding/StepColor.vue";

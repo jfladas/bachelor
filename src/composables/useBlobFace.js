@@ -331,6 +331,9 @@ export const useBlobFace = () => {
     };
 
     const setFace = (nextFace) => {
+        if (nextFace in EMOTION_FACE_PRESETS) {
+            nextFace = EMOTION_FACE_PRESETS[nextFace];
+        }
         if (!FACE_PRESETS[nextFace]) {
             nextFace = "default";
         }
@@ -340,11 +343,6 @@ export const useBlobFace = () => {
         const target = FACE_PRESETS[nextFace];
         animateFace(target);
         scheduleNextBlink();
-    };
-
-    const setFaceEmotion = (emotionId) => {
-        const preset = EMOTION_FACE_PRESETS[emotionId] || "default";
-        setFace(preset);
     };
 
     const faceParts = computed(() => ({
@@ -365,7 +363,6 @@ export const useBlobFace = () => {
     return {
         faceParts,
         setFace,
-        setFaceEmotion,
         startEyeFollow,
         stopEyeFollow,
         eyesOffset,

@@ -1,7 +1,9 @@
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage } = require("electron");
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, powerMonitor } = require("electron");
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const crypto = require('crypto');
+const StorageService = require('./storageService.cjs');
 
 let mainWindow;
 let tray;
@@ -10,6 +12,19 @@ let lastWorkAreaSignature = '';
 let onDisplayMetricsChanged;
 let onDisplayAdded;
 let onDisplayRemoved;
+
+// Journal encryption state (only in memory)
+let encryptionKey = null;
+let isUnlocked = false;
+let storageService = null;
+
+function setJournalUnlocked(nextUnlocked) {
+    isUnlocked = Boolean(nextUnlocked);
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('journal:lock-state-changed', isUnlocked);
+    }
+}
 
 // Use app.isPackaged to detect production vs development. When running locally
 // via `npm run dev` the app will not be packaged so we should load the Vite dev
@@ -139,6 +154,55 @@ function resetOnboardingState() {
     }
 }
 
+function resetJournalState() {
+    try {
+        encryptionKey = null;
+        setJournalUnlocked(false);
+
+        if (!storageService) {
+            storageService = new StorageService(app.getPath('userData'));
+        }
+
+        storageService.resetJournal();
+        storageService = new StorageService(app.getPath('userData'));
+
+        return true;
+    } catch (error) {
+        console.error('Failed to reset journal state:', error);
+        return false;
+    }
+}
+
+function encryptCipherData(plaintext, key) {
+    const nonce = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, nonce);
+
+    let ciphertext = cipher.update(JSON.stringify(plaintext), 'utf8', 'hex');
+    ciphertext += cipher.final('hex');
+
+    const authTag = cipher.getAuthTag();
+
+    return {
+        nonce: nonce.toString('hex'),
+        ciphertext,
+        authTag: authTag.toString('hex'),
+    };
+}
+
+function decryptCipherData(encrypted, key) {
+    const nonce = Buffer.from(encrypted.nonce, 'hex');
+    const ciphertext = Buffer.from(encrypted.ciphertext, 'hex');
+    const authTag = Buffer.from(encrypted.authTag, 'hex');
+
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, nonce);
+    decipher.setAuthTag(authTag);
+
+    let plaintext = decipher.update(ciphertext, 'hex', 'utf8');
+    plaintext += decipher.final('utf8');
+
+    return JSON.parse(plaintext);
+}
+
 function showMainWindow() {
     if (!mainWindow) {
         return;
@@ -254,6 +318,182 @@ function registerIpcHandlers() {
         writeOnboardingState(nextState);
     });
 
+    // Journal encryption handlers
+    ipcMain.handle('journal:is-password-protected', () => {
+        if (!storageService) return false;
+        return storageService.isPasswordProtected();
+    });
+
+    ipcMain.handle('journal:get-metadata', () => {
+        if (!storageService) return [];
+        return storageService.getMetadata();
+    });
+
+    ipcMain.handle('journal:is-unlocked', () => {
+        return isUnlocked;
+    });
+
+    ipcMain.handle('journal:setup-password', (event, password) => {
+        if (!storageService) {
+            storageService = new StorageService(app.getPath('userData'));
+        }
+
+        const salt = storageService.getSalt();
+        encryptionKey = crypto
+            .pbkdf2Sync(password, Buffer.from(salt, 'hex'), 100000, 32, 'sha256');
+
+        // Repair metadata for old entries (mark .enc files as secret)
+        storageService.repairMetadata();
+
+        setJournalUnlocked(true);
+
+        return { success: true, passwordSet: true };
+    });
+
+    ipcMain.handle('journal:verify-password', (event, password) => {
+        if (!storageService) {
+            storageService = new StorageService(app.getPath('userData'));
+        }
+
+        const salt = storageService.getSalt();
+        const derivedKey = crypto
+            .pbkdf2Sync(password, Buffer.from(salt, 'hex'), 100000, 32, 'sha256');
+
+        // Try to decrypt at least one secret entry to verify PIN is correct.
+        // If no encrypted secret exists yet, the PIN still counts as valid because
+        // the journal can already be password-protected from metadata alone.
+        try {
+            const metadata = storageService.getMetadata();
+            const secretEntries = metadata.filter(m => m.isSecret);
+
+            const encryptedSecret = secretEntries.find((m) => {
+                const encryptedPath = path.join(storageService.journalDir, `${m.id}.enc`);
+                return fs.existsSync(encryptedPath);
+            });
+
+            if (encryptedSecret) {
+                const encryptedPath = path.join(storageService.journalDir, `${encryptedSecret.id}.enc`);
+                const encrypted = JSON.parse(fs.readFileSync(encryptedPath, 'utf8'));
+                decryptCipherData(encrypted, derivedKey);
+            }
+        } catch (error) {
+            return { success: false, error: 'Incorrect PIN' };
+        }
+
+        encryptionKey = derivedKey;
+        setJournalUnlocked(true);
+
+        storageService.repairMetadata();
+
+        const metadata = storageService.getMetadata();
+        for (const metaEntry of metadata) {
+            if (!metaEntry.isSecret) {
+                continue;
+            }
+
+            const plainPath = path.join(storageService.journalDir, `${metaEntry.id}.json`);
+            const encryptedPath = path.join(storageService.journalDir, `${metaEntry.id}.enc`);
+
+            if (!fs.existsSync(plainPath) || fs.existsSync(encryptedPath)) {
+                continue;
+            }
+
+            try {
+                const plainContent = JSON.parse(fs.readFileSync(plainPath, 'utf8'));
+                const encryptedContent = encryptCipherData(plainContent, encryptionKey);
+                storageService.saveEntry(
+                    {
+                        id: metaEntry.id,
+                        createdAt: metaEntry.createdAt || plainContent.createdAt || new Date().toISOString(),
+                        metadata: {
+                            ...metaEntry,
+                            isSecret: true,
+                        },
+                    },
+                    encryptedContent
+                );
+                fs.unlinkSync(plainPath);
+            } catch (error) {
+                console.error('Failed to re-encrypt locked secret entry:', metaEntry.id, error);
+            }
+        }
+
+        return { success: true };
+    });
+
+    ipcMain.handle('journal:save-entry', (event, entry) => {
+        if (!storageService) {
+            throw new Error('Storage not initialized');
+        }
+
+        const entryData = {
+            id: entry.id,
+            createdAt: entry.createdAt,
+            updatedAt: new Date().toISOString(),
+            text: entry.text,
+            emotion: entry.emotion,
+            prompt: entry.prompt,
+        };
+
+        const entryWithMetadata = {
+            id: entry.id,
+            createdAt: entry.createdAt,
+            metadata: {
+                emotion: entry.emotion,
+                hasText: Boolean(entry.text),
+                isSecret: entry.isSecret,
+            },
+        };
+
+        if (entry.isSecret) {
+            if (!encryptionKey) {
+                storageService.savePlainEntry(entryWithMetadata, entryData);
+            } else {
+                const encryptedContent = encryptCipherData(entryData, encryptionKey);
+                storageService.saveEntry(entryWithMetadata, encryptedContent);
+            }
+        } else {
+            storageService.savePlainEntry(entryWithMetadata, entryData);
+        }
+
+        return { success: true, id: entry.id };
+    });
+
+    ipcMain.handle('journal:load-entries', () => {
+        if (!storageService) {
+            throw new Error('Storage not initialized');
+        }
+
+        if (encryptionKey) {
+            return storageService.loadAllEntries((encrypted) => {
+                return decryptCipherData(encrypted, encryptionKey);
+            });
+        }
+
+        return storageService.loadAllEntries();
+    });
+
+    ipcMain.handle('journal:delete-entry', (event, entryId) => {
+        if (!storageService) {
+            throw new Error('Journal encryption not initialized');
+        }
+
+        storageService.deleteEntry(entryId);
+        return { success: true };
+    });
+
+    ipcMain.handle('journal:clear-password', () => {
+        encryptionKey = null;
+        setJournalUnlocked(false);
+        return { success: true };
+    });
+
+    ipcMain.handle('journal:lock', () => {
+        encryptionKey = null;
+        setJournalUnlocked(false);
+        return { success: true };
+    });
+
     ipcRegistered = true;
 }
 
@@ -290,6 +530,9 @@ app.whenReady().then(async () => {
     const { width, height } = screen.getPrimaryDisplay().workAreaSize;
     const initialOnboardingState = readOnboardingState();
 
+    // Initialize storage service for encrypted journal
+    storageService = new StorageService(app.getPath('userData'));
+
     mainWindow = new BrowserWindow({
         width: width,
         height: height,
@@ -303,6 +546,7 @@ app.whenReady().then(async () => {
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
+            preload: path.join(__dirname, 'preload.js'),
         },
     });
 
@@ -331,6 +575,11 @@ app.whenReady().then(async () => {
     }, 1000);
 
     registerIpcHandlers();
+
+    powerMonitor.on('lock-screen', () => {
+        encryptionKey = null;
+        setJournalUnlocked(false);
+    });
 
     if (isDev) {
         try {
@@ -395,25 +644,22 @@ app.whenReady().then(async () => {
             },
         ];
 
-        if (isDev) {
-            trayMenuTemplate.push(
-                {
-                    label: "Reset Onboarding",
-                    click: async () => {
-                        const didReset = resetOnboardingState();
-                        if (!didReset || !mainWindow) {
-                            return;
-                        }
+        trayMenuTemplate.push(
+            {
+                label: "Reset Onboarding",
+                click: async () => {
+                    const didReset = resetOnboardingState();
+                    const didResetJournal = resetJournalState();
+                    if (!didReset || !didResetJournal || !mainWindow) {
+                        return;
+                    }
 
-                        mainWindow.setIgnoreMouseEvents(false, { forward: true });
-                        await mainWindow.webContents.reloadIgnoringCache();
-                    },
+                    mainWindow.setIgnoreMouseEvents(false, { forward: true });
+                    await mainWindow.webContents.reloadIgnoringCache();
                 },
-                { type: "separator" }
-            );
-        } else {
-            trayMenuTemplate.push({ type: "separator" });
-        }
+            },
+            { type: "separator" }
+        );
 
         trayMenuTemplate.push({
             label: "Quit",

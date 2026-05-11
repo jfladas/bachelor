@@ -83,6 +83,12 @@ button :slotted(.icon svg) {
     right: 1rem;
 }
 
+.list-button {
+    position: absolute;
+    top: 1rem;
+    right: 3.5rem;
+}
+
 .circle-small {
     width: 2rem;
     height: 2rem;

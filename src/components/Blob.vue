@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import BlobVisuals from "./BlobVisuals.vue";
 import RadialMenu from "./RadialMenu.vue";
 import MicroJournal from "./MicroJournal.vue";
+import PasswordSetup from "./PasswordSetup.vue";
 import { useBlobPhysics } from "../composables/useBlobPhysics";
 import { STATES } from "../composables/useBlobState";
 import { useBlobFace } from "../composables/useBlobFace";
@@ -73,27 +74,35 @@ const {
     ipcRenderer,
 });
 
-const { faceParts, setFaceEmotion, startEyeFollow, stopEyeFollow, eyesOffset } = useBlobFace();
+const { faceParts, setFace, startEyeFollow, stopEyeFollow, eyesOffset } = useBlobFace();
 const blobState = useBlobState();
 
+const journal = useMicroJournal();
 const {
     emotionTags,
     journalText,
     selectedEmotion,
     activePrompt,
     canSubmit,
+    entries,
+    isUnlocked,
     maxEntryLength,
     setJournalText,
     setEmotionTag,
     rotatePrompt,
     resetDraft,
     saveEntry,
-} = useMicroJournal();
+} = journal;
 
 const menuOpen = ref(false);
 const journalOpen = ref(false);
 const journalPanelSide = ref(null);
 const secMenuOpen = ref(false);
+const showPasswordModal = ref(false);
+
+onMounted(async () => {
+    await journal.loadEntries();
+});
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
@@ -284,22 +293,29 @@ const quitApplication = () => {
     ipcRenderer?.send?.("quit-app");
 };
 
-const submitJournal = (entryOptions = {}) => {
-    const savedEntry = saveEntry(entryOptions);
+const submitJournal = async (entryOptions = {}) => {
+    const savedEntry = await saveEntry(entryOptions);
     if (!savedEntry) {
         return;
     }
 
     jump();
-    closeMenu();
     blobState.setState(STATES.IDLE);
+};
+
+const handleUnlockEntry = async () => {
+    showPasswordModal.value = true;
+};
+
+const handlePasswordSetupComplete = async () => {
+    showPasswordModal.value = false;
 };
 
 watch(
     selectedEmotion,
     (emotionId) => {
         if (emotionId) {
-            setFaceEmotion(emotionId);
+            setFace(emotionId);
         }
     },
     { immediate: true }
@@ -363,8 +379,12 @@ onBeforeUnmount(() => {
 
         <MicroJournal :visible="journalOpen" :panel-style="panelStyle" :prompt="activePrompt"
             :emotion-tags="emotionTags" :selected-emotion="selectedEmotion" :text-value="journalText"
-            :can-submit="canSubmit" :max-length="maxEntryLength" @close="closeMenu" @select-emotion="setEmotionTag"
-            @rotate-prompt="rotatePrompt" @update:text="setJournalText" @submit="submitJournal" />
+            :can-submit="canSubmit" :max-length="maxEntryLength" :entries="entries" :is-unlocked="isUnlocked"
+            @close="closeMenu" @select-emotion="setEmotionTag" @rotate-prompt="rotatePrompt"
+            @update:text="setJournalText" @submit="submitJournal" @unlock-entries="handleUnlockEntry" />
+
+        <PasswordSetup v-if="showPasswordModal" @password-set="handlePasswordSetupComplete"
+            @password-unlocked="handlePasswordSetupComplete" @cancel="showPasswordModal = false" />
     </div>
 </template>
 
