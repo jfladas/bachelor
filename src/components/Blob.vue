@@ -92,6 +92,7 @@ const {
     rotatePrompt,
     resetDraft,
     saveEntry,
+    isPinProtected,
 } = journal;
 
 const menuOpen = ref(false);
@@ -99,6 +100,9 @@ const journalOpen = ref(false);
 const journalPanelSide = ref(null);
 const secMenuOpen = ref(false);
 const showPasswordModal = ref(false);
+const pendingEntryOptions = ref(null);
+const _passwordSetupResolve = { ref: null };
+const _passwordSetupReject = { ref: null };
 
 onMounted(async () => {
     await journal.loadEntries();
@@ -295,13 +299,32 @@ const quitApplication = () => {
 };
 
 const submitJournal = async (entryOptions = {}) => {
-    const savedEntry = await saveEntry(entryOptions);
-    if (!savedEntry) {
+    try {
+        if (entryOptions?.isSecret) {
+            const protectedAlready = await isPinProtected();
+            if (!protectedAlready) {
+                pendingEntryOptions.value = entryOptions;
+                showPasswordModal.value = true;
+
+                await new Promise((resolve, reject) => {
+                    _passwordSetupResolve.ref = resolve;
+                    _passwordSetupReject.ref = reject;
+                });
+            }
+        }
+
+        const savedEntry = await saveEntry(entryOptions);
+        if (!savedEntry) {
+            return;
+        }
+
+        jump();
+        blobState.setState(STATES.IDLE);
+    } catch (err) {
+        // user cancelled PIN setup or something else failed; abort submission silently
+        pendingEntryOptions.value = null;
         return;
     }
-
-    jump();
-    blobState.setState(STATES.IDLE);
 };
 
 const handleUnlockEntry = async () => {
@@ -310,6 +333,21 @@ const handleUnlockEntry = async () => {
 
 const handlePasswordSetupComplete = async () => {
     showPasswordModal.value = false;
+    // resolve any pending submit waiting for PIN setup
+    if (_passwordSetupResolve.ref) {
+        _passwordSetupResolve.ref(true);
+        _passwordSetupResolve.ref = null;
+    }
+    _passwordSetupReject.ref = null;
+};
+
+const handlePasswordSetupCancel = async () => {
+    showPasswordModal.value = false;
+    if (_passwordSetupReject.ref) {
+        _passwordSetupReject.ref(new Error('cancelled'));
+        _passwordSetupReject.ref = null;
+    }
+    _passwordSetupResolve.ref = null;
 };
 
 watch(
@@ -385,7 +423,7 @@ onBeforeUnmount(() => {
             @update:text="setJournalText" @submit="submitJournal" @unlock-entries="handleUnlockEntry" />
 
         <PasswordSetup v-if="showPasswordModal" @password-set="handlePasswordSetupComplete"
-            @password-unlocked="handlePasswordSetupComplete" @cancel="showPasswordModal = false" />
+            @password-unlocked="handlePasswordSetupComplete" @cancel="handlePasswordSetupCancel" />
     </div>
 </template>
 

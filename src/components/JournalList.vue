@@ -87,7 +87,7 @@ const getEntryText = (entry) => {
 <template>
     <div class="entries-list">
         <div v-if="sortedEntries.length === 0" class="empty-state">
-            <p>No entries yet. Start writing to create your first entry!</p>
+            <p class="description">No entries yet. Start writing to create your first entry!</p>
         </div>
 
         <div v-for="entry in sortedEntries" :key="entry.id" class="entry-item">
@@ -125,6 +125,7 @@ const getEntryText = (entry) => {
     align-items: stretch;
     gap: 1rem;
     padding: 0 0.5rem;
+    pointer-events: auto;
 }
 
 .empty-state {
@@ -132,7 +133,6 @@ const getEntryText = (entry) => {
     text-align: center;
     border-radius: 1rem 1rem 0 0;
     background: radial-gradient(circle, white, var(--white));
-    color: var(--text-strong);
 }
 
 .entry-item {
@@ -142,7 +142,6 @@ const getEntryText = (entry) => {
     color: var(--text-strong);
     border-radius: 1rem;
     overflow-x: visible;
-    pointer-events: auto;
 }
 
 .entries-list>.entry-item:last-of-type {
