@@ -30,24 +30,41 @@ const sortedEntries = computed(() => {
 })
 
 const formatDate = (isoString) => {
-    try {
-        const date = new Date(isoString)
-        return date.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-        })
-    } catch {
+    const date = new Date(isoString)
+
+    if (Number.isNaN(date.getTime())) {
         return 'Unknown date'
     }
+
+    const currentYear = new Date().getFullYear()
+    const dateParts = {
+        month: 'short',
+        day: 'numeric',
+    }
+
+    if (date.getFullYear() !== currentYear) {
+        dateParts.year = 'numeric'
+    }
+
+    const formattedDate = date.toLocaleDateString('en-US', dateParts)
+    const formattedTime = date.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    })
+
+    return `${formattedDate}, ${formattedTime}`
 }
 
 const emotionLabel = (emotionId) => {
     if (!emotionId) return ''
     const emotion = props.emotionTags.find((e) => e.id === emotionId)
     return emotion ? emotion.label : ''
+}
+
+const emotionTag = (emotionId) => {
+    if (!emotionId) return null
+    return props.emotionTags.find((e) => e.id === emotionId) || null
 }
 
 const handleUnlock = (entryId) => {
@@ -76,13 +93,17 @@ const getEntryText = (entry) => {
         <div v-for="entry in sortedEntries" :key="entry.id" class="entry-item">
             <div class="entry-content" :class="{ blurred: isEntryLocked(entry) }">
                 <div class="entry-header">
-                    <span v-if="entry.emotion" class="emotion-badge">{{ emotionLabel(entry.emotion) }}</span>
+                    <span v-if="entry.emotion" class="emotion-badge">
+                        <span v-if="emotionTag(entry.emotion)?.svg" class="emotion-icon"
+                            v-html="emotionTag(entry.emotion).svg"></span>
+                        <span>{{ emotionLabel(entry.emotion) }}</span>
+                    </span>
                     <span class="entry-date">{{ formatDate(entry.createdAt) }}</span>
                 </div>
 
                 <p v-if="entry.text || isEntryLocked(entry)" class="entry-text">{{ getEntryText(entry) }}</p>
 
-                <p v-if="entry.prompt && !isEntryLocked(entry)" class="entry-prompt">{{ entry.prompt }}</p>
+                <p v-if="entry.prompt && entry.text" class="entry-prompt">{{ entry.prompt }}</p>
             </div>
 
             <div v-if="isEntryLocked(entry)" class="locked-overlay">
@@ -97,26 +118,31 @@ const getEntryText = (entry) => {
 <style scoped>
 .entries-list {
     height: 100%;
+    overflow-x: visible;
     overflow-y: auto;
     display: flex;
     flex-direction: column-reverse;
     align-items: stretch;
     gap: 1rem;
     padding: 0 0.5rem;
-    transform: translateX(0.5rem);
 }
 
 .empty-state {
-    padding: 2rem 1rem;
+    padding: 1rem;
     text-align: center;
-    color: var(--text);
+    border-radius: 1rem 1rem 0 0;
+    background: radial-gradient(circle, white, var(--white));
+    color: var(--text-strong);
 }
 
 .entry-item {
     position: relative;
     padding: 1rem;
-    background: var(--white);
+    background: radial-gradient(circle, white, var(--white));
+    color: var(--text-strong);
     border-radius: 1rem;
+    overflow-x: visible;
+    pointer-events: auto;
 }
 
 .entries-list>.entry-item:last-of-type {
@@ -150,18 +176,27 @@ const getEntryText = (entry) => {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    margin-bottom: 0.5rem;
     font-size: 0.8rem;
 }
 
 .emotion-badge {
-    display: inline-block;
-    padding: 0.25rem 0.5rem;
-    background: var(--secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.5rem;
+    background: linear-gradient(to right, var(--secondary) 50%, transparent);
     border-radius: 0.5rem;
-    color: var(--text-strong);
-    font-weight: 500;
+    color: var(--text);
     font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.emotion-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    fill: currentColor;
+    transform: scale(0.9);
 }
 
 .entry-date {
@@ -170,7 +205,8 @@ const getEntryText = (entry) => {
 }
 
 .entry-text {
-    margin: 0.5rem 0 0.25rem 0;
+    margin: 0.5rem 0 0 0;
+    padding-left: 0.2rem;
     color: var(--text-strong);
     font-size: 0.9rem;
     line-height: 1.4;
@@ -183,9 +219,10 @@ const getEntryText = (entry) => {
 
 .entry-prompt {
     margin: 0.5rem 0 0 0;
+    padding-left: 0.2rem;
     color: var(--text);
     font-size: 0.8rem;
-    font-style: italic;
+    font-family: 'GeneralSans-VariableItalic', 'GeneralSans-Italic', sans-serif;
     display: -webkit-box;
     line-clamp: 1;
     -webkit-line-clamp: 1;

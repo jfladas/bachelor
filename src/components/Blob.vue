@@ -282,10 +282,11 @@ const openSecMenu = () => {
 const sendToSleep = () => {
     closeMenu();
     ipcRenderer?.send?.("hide-app");
+    window.alert("Work in progress");
 };
 
 const openSettings = () => {
-    // Placeholder until settings UI is implemented.
+    window.alert("Work in progress");
 };
 
 const quitApplication = () => {

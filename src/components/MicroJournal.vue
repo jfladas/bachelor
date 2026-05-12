@@ -151,6 +151,7 @@ const listAreaStyle = computed(() => {
             <JournalList :visible="showJournalList" :entries="props.entries" :emotion-tags="props.emotionTags"
                 :is-unlocked="props.isUnlocked" @unlock-entries="handleUnlockEntry" />
         </section>
+        <div v-show="showJournalList" class="list-shadow" :style="props.panelStyle"></div>
         <section class="window" :style="props.panelStyle" role="dialog" aria-label="Micro journal" ref="windowEl">
             <header class="header">
                 <p class="eyebrow">Micro Journal</p>
@@ -276,6 +277,7 @@ const listAreaStyle = computed(() => {
     top: 0;
     padding: 0 1.8rem;
     border-radius: 2rem;
+    pointer-events: none;
 }
 
 .window {
@@ -284,6 +286,16 @@ const listAreaStyle = computed(() => {
     width: 30rem;
     height: auto;
     padding: 1.2rem 1.8rem 6rem 1.8rem;
+}
+
+.list-shadow {
+    position: fixed;
+    z-index: 15;
+    width: 30rem;
+    height: 60%;
+    padding: 1.2rem 1.8rem 6rem 1.8rem;
+    background: radial-gradient(color-mix(in srgb, var(--primary) 35%, transparent), transparent 60%);
+    border-radius: 2rem;
 }
 
 .subpanel {
