@@ -56,18 +56,48 @@ const props = defineProps({
 
 const dev = false; // dev mode shows physics bodies and outlines for debugging
 
-defineEmits(["start-drag", "open-menu", "open-sec-menu"]);
+const emit = defineEmits(["start-drag", "open-menu", "open-sec-menu"]);
+
+import { ref } from 'vue';
+
+const downPos = ref(null);
+const CLICK_MOVE_THRESHOLD = 6;
+
+function handlePointerDown(event) {
+    downPos.value = { x: event.clientX, y: event.clientY };
+    emit('start-drag', event);
+
+    const onPointerUp = (upEvent) => {
+        if (upEvent.button === 2) {
+            downPos.value = null;
+            return;
+        }
+
+        if (downPos.value) {
+            const dx = (upEvent.clientX || 0) - downPos.value.x;
+            const dy = (upEvent.clientY || 0) - downPos.value.y;
+            const distSq = dx * dx + dy * dy;
+            if (distSq <= CLICK_MOVE_THRESHOLD * CLICK_MOVE_THRESHOLD) {
+                emit('open-menu', upEvent);
+            }
+        }
+
+        downPos.value = null;
+    };
+
+    window.addEventListener('pointerup', onPointerUp, { once: true });
+}
 </script>
 
 <template>
     <div class="root" :style="props.hueVariables" :class="[{ active: props.isActive }, `state-${props.state}`]">
         <svg class="blob-overlay" aria-hidden="true">
             <path :ref="props.blobAreaRef" class="blob-area" :class="{ grabbing: props.grabbing, dev: dev }"
-                :d="props.blobPath" @mousedown="$emit('start-drag', $event)" @click.stop="$emit('open-menu')"
+                :d="props.blobPath" @pointerdown="handlePointerDown"
                 @contextmenu.prevent.stop="$emit('open-sec-menu', $event)" />
             <path :ref="props.blobEdgeRef" class="blob-edge" :class="{ dev: dev }" :d="props.blobPath"
                 :style="{ strokeWidth: `${props.edgeWidth}px` }" @mousedown="$emit('start-drag', $event)"
-                @click.stop="$emit('open-menu')" @contextmenu.prevent.stop="$emit('open-sec-menu', $event)" />
+                @pointerdown="handlePointerDown" @contextmenu.prevent.stop="$emit('open-sec-menu', $event)" />
         </svg>
 
         <div v-if="!dev" class="face" :style="props.faceStyle">
@@ -102,6 +132,7 @@ defineEmits(["start-drag", "open-menu", "open-sec-menu"]);
 .root {
     position: fixed;
     inset: 0;
+    pointer-events: none;
 }
 
 .blob-overlay {

@@ -1,4 +1,6 @@
-# Bachelor 2026
+# Amorphous Blob
+
+_Bachelor 2026_
 
 Desktop presence built with Vue, Vite, Electron, and Matter.js.
 

@@ -619,7 +619,7 @@ app.whenReady().then(async () => {
         }
 
         tray = new Tray(trayIcon);
-        tray.setToolTip("Bachelor");
+        tray.setToolTip("Amorphous Blob");
         const trayMenuTemplate = [
             {
                 label: "Show",

@@ -118,7 +118,6 @@ const getEntryText = (entry) => {
 <style scoped>
 .entries-list {
     height: 100%;
-    overflow-x: visible;
     overflow-y: auto;
     display: flex;
     flex-direction: column-reverse;
@@ -139,9 +138,9 @@ const getEntryText = (entry) => {
     position: relative;
     padding: 1rem;
     background: radial-gradient(circle, white, var(--white));
+    box-shadow: 0 0 0.5rem color-mix(in oklch, var(--shadow) 50%, transparent);
     color: var(--text-strong);
     border-radius: 1rem;
-    overflow-x: visible;
 }
 
 .entries-list>.entry-item:last-of-type {

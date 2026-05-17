@@ -44,28 +44,47 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    promptVisible: {
+        type: Boolean,
+        default: false,
+    },
+    emotionVisible: {
+        type: Boolean,
+        default: true,
+    },
+    textVisible: {
+        type: Boolean,
+        default: true,
+    },
 });
 
-const emit = defineEmits(["close", "rotate-prompt", "select-emotion", "update:text", "submit", "unlock-entries"]);
+const emit = defineEmits([
+    "close",
+    "rotate-prompt",
+    "select-emotion",
+    "update:text",
+    "update:prompt-visible",
+    "update:emotion-visible",
+    "update:text-visible",
+    "submit",
+    "unlock-entries",
+]);
 
-const showPrompt = ref(false);
-const showEmotion = ref(true);
-const showText = ref(true);
 const isSecretEntry = ref(false);
 const showJournalList = ref(true);
 const windowEl = ref(null);
 const windowHeight = ref(0);
 
 const showPromptSection = () => {
-    showPrompt.value = true;
+    emit("update:prompt-visible", true);
 };
 
 const hidePromptSection = () => {
-    showPrompt.value = false;
+    emit("update:prompt-visible", false);
 };
 
 const showEmotionSection = () => {
-    showEmotion.value = true;
+    emit("update:emotion-visible", true);
 };
 
 const hideEmotionSection = () => {
@@ -73,16 +92,16 @@ const hideEmotionSection = () => {
         emit("select-emotion", props.selectedEmotion);
     }
 
-    showEmotion.value = false;
+    emit("update:emotion-visible", false);
 };
 
 const showTextSection = () => {
-    showText.value = true;
+    emit("update:text-visible", true);
 };
 
 const hideTextSection = () => {
     emit("update:text", "");
-    showText.value = false;
+    emit("update:text-visible", false);
 };
 
 const toggleSecretEntry = () => {
@@ -95,9 +114,9 @@ const toggleJournalList = () => {
 
 const handleSubmit = () => {
     emit("submit", {
-        includePrompt: showPrompt.value,
-        includeEmotion: showEmotion.value,
-        includeText: showText.value,
+        includePrompt: props.promptVisible,
+        includeEmotion: props.emotionVisible,
+        includeText: props.textVisible,
         isSecret: isSecretEntry.value,
     });
 };
@@ -108,10 +127,6 @@ watch(
         if (!isVisible) {
             return;
         }
-
-        showPrompt.value = false;
-        showEmotion.value = true;
-        showText.value = true;
         showJournalList.value = true;
 
         await nextTick();
@@ -173,20 +188,20 @@ const listAreaStyle = computed(() => {
                 </div>
             </header>
 
-            <div v-if="!showPrompt || !showEmotion || !showText" class="optional-actions">
-                <Button v-if="!showPrompt" variant="secondary" @click="showPromptSection">
+            <div v-if="!props.promptVisible || !props.emotionVisible || !props.textVisible" class="optional-actions">
+                <Button v-if="!props.promptVisible" variant="secondary" @click="showPromptSection">
                     Show prompt
                 </Button>
 
-                <Button v-if="!showEmotion" variant="secondary" @click="showEmotionSection">
+                <Button v-if="!props.emotionVisible" variant="secondary" @click="showEmotionSection">
                     Show emotion
                 </Button>
 
-                <Button v-if="!showText" variant="secondary" @click="showTextSection">
+                <Button v-if="!props.textVisible" variant="secondary" @click="showTextSection">
                     Show text field
                 </Button>
             </div>
-            <div v-if="showPrompt" class="subpanel optional">
+            <div v-if="props.promptVisible" class="subpanel optional">
                 <button type="button" class="remove-option" aria-label="Remove prompt" @click="hidePromptSection">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
                         <path
@@ -208,7 +223,7 @@ const listAreaStyle = computed(() => {
 
             </div>
 
-            <div v-if="showEmotion" class="subpanel optional">
+            <div v-if="props.emotionVisible" class="subpanel optional">
                 <button class="remove-option" aria-label="Remove emotion" @click="hideEmotionSection">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
                         <path
@@ -226,7 +241,7 @@ const listAreaStyle = computed(() => {
                 </div>
             </div>
 
-            <div v-if="showText" class="subpanel optional">
+            <div v-if="props.textVisible" class="subpanel optional">
                 <button type="button" class="remove-option" aria-label="Remove entry field" @click="hideTextSection">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
                         <path

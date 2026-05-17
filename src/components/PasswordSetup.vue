@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useMicroJournal } from '@/composables/useMicroJournal'
 import Button from './Button.vue'
 
@@ -11,6 +11,19 @@ const pinConfirm = ref('')
 const errorMessage = ref('')
 const isLoading = ref(false)
 const mode = ref('setup') // 'setup' or 'unlock'
+const pinInputRef = ref(null)
+
+const focusPinInput = async () => {
+    await nextTick()
+
+    const input = pinInputRef.value
+    if (!input) {
+        return
+    }
+
+    input.focus()
+    input.select()
+}
 
 const initialize = async () => {
     const isProtected = await journal.isPinProtected()
@@ -18,6 +31,10 @@ const initialize = async () => {
 }
 
 onMounted(initialize)
+
+watch(mode, async () => {
+    await focusPinInput()
+}, { immediate: true })
 
 const pinFull = computed(() => pin.value.length === 4)
 const pinConfirmFull = computed(() => pinConfirm.value.length === 4)
@@ -76,6 +93,7 @@ const handleUnlockPin = async () => {
         emit('password-unlocked')
     } else {
         errorMessage.value = result.error || 'Unlock failed'
+        await focusPinInput()
     }
 }
 
@@ -97,9 +115,11 @@ const handleUnlockPin = async () => {
 
                 <div class="field pin-inputs">
                     <input v-model="pin" type="text" inputmode="numeric" maxlength="4" placeholder="PIN"
-                        class="pin-input" :disabled="isLoading" @input="handlePinInput($event, 'pin')" />
+                        class="pin-input" :disabled="isLoading" @input="handlePinInput($event, 'pin')"
+                        ref="pinInputRef" />
                     <input v-model="pinConfirm" type="text" inputmode="numeric" maxlength="4" placeholder="Confirm"
-                        class="pin-input" :disabled="isLoading" @input="handlePinInput($event, 'confirm')" />
+                        class="pin-input" :disabled="isLoading" @input="handlePinInput($event, 'confirm')"
+                        @keyup.enter="handleSetupPin" />
                 </div>
 
                 <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
@@ -120,7 +140,7 @@ const handleUnlockPin = async () => {
 
                 <div class="field">
                     <input v-model="pin" type="text" inputmode="numeric" maxlength="4" placeholder="PIN"
-                        class="pin-input" :disabled="isLoading" @input="handlePinInput($event, 'pin')"
+                        class="pin-input" :disabled="isLoading" @input="handlePinInput($event, 'pin')" ref="pinInputRef"
                         @keyup.enter="handleUnlockPin" />
                 </div>
 

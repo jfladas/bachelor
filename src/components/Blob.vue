@@ -98,6 +98,10 @@ const {
 const menuOpen = ref(false);
 const journalOpen = ref(false);
 const journalPanelSide = ref(null);
+const lockedPanelStyle = ref(null);
+const journalPromptVisible = ref(false);
+const journalEmotionVisible = ref(true);
+const journalTextVisible = ref(true);
 const secMenuOpen = ref(false);
 const showPasswordModal = ref(false);
 const pendingEntryOptions = ref(null);
@@ -183,7 +187,7 @@ const getJournalPanelSide = () => {
     return blobCenter.value.x < width / 2 ? "left" : "right";
 };
 
-const panelStyle = computed(() => {
+const computedPanelStyle = computed(() => {
     const { width } = getViewportBounds();
     const panelWidth = 480;
     const minInset = 110;
@@ -223,6 +227,13 @@ const panelStyle = computed(() => {
     };
 });
 
+const panelStyle = computed(() => {
+    if (journalOpen.value && lockedPanelStyle.value) {
+        return lockedPanelStyle.value;
+    }
+    return computedPanelStyle.value;
+});
+
 const setMenuState = (isOpen) => {
     blobState.setState(isOpen ? STATES.ACTIVE : STATES.IDLE);
 };
@@ -235,6 +246,7 @@ const closeMenu = ({ clearDraft = false } = {}) => {
     menuOpen.value = false;
     journalOpen.value = false;
     journalPanelSide.value = null;
+    lockedPanelStyle.value = null;
     secMenuOpen.value = false;
     syncMenuState();
 
@@ -377,11 +389,19 @@ onMounted(() => {
 });
 
 watch(grabbing, (isGrabbing) => {
-    if (!isGrabbing || !menuOpen.value) {
+    if (!isGrabbing || !(menuOpen.value || journalOpen.value || secMenuOpen.value)) {
         return;
     }
 
     closeMenu();
+});
+
+watch(journalOpen, (isOpen) => {
+    if (isOpen) {
+        lockedPanelStyle.value = computedPanelStyle.value;
+    } else {
+        lockedPanelStyle.value = null;
+    }
 });
 
 watch(
@@ -419,11 +439,16 @@ onBeforeUnmount(() => {
         <MicroJournal :visible="journalOpen" :panel-style="panelStyle" :prompt="activePrompt"
             :emotion-tags="emotionTags" :selected-emotion="selectedEmotion" :text-value="journalText"
             :can-submit="canSubmit" :max-length="maxEntryLength" :entries="entries" :is-unlocked="isUnlocked"
+            :prompt-visible="journalPromptVisible" :emotion-visible="journalEmotionVisible"
+            :text-visible="journalTextVisible" @update:prompt-visible="journalPromptVisible = $event"
+            @update:emotion-visible="journalEmotionVisible = $event" @update:text-visible="journalTextVisible = $event"
             @close="closeMenu" @select-emotion="setEmotionTag" @rotate-prompt="rotatePrompt"
             @update:text="setJournalText" @submit="submitJournal" @unlock-entries="handleUnlockEntry" />
 
-        <PasswordSetup v-if="showPasswordModal" @password-set="handlePasswordSetupComplete"
-            @password-unlocked="handlePasswordSetupComplete" @cancel="handlePasswordSetupCancel" />
+        <Transition name="overlay-fade" appear>
+            <PasswordSetup v-if="showPasswordModal" @password-set="handlePasswordSetupComplete"
+                @password-unlocked="handlePasswordSetupComplete" @cancel="handlePasswordSetupCancel" />
+        </Transition>
     </div>
 </template>
 
@@ -432,6 +457,10 @@ onBeforeUnmount(() => {
 
     position: fixed;
     inset: 0;
+}
+
+.shell :deep(.root) {
+    z-index: 13;
 }
 
 .menu-backdrop {
@@ -443,5 +472,16 @@ onBeforeUnmount(() => {
     margin: 0;
     background: transparent;
     pointer-events: all;
+}
+
+.overlay-fade-enter-active,
+.overlay-fade-leave-active {
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.overlay-fade-enter-from,
+.overlay-fade-leave-to {
+    opacity: 0;
+    transform: scale(0.98);
 }
 </style>

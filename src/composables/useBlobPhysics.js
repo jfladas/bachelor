@@ -14,7 +14,7 @@ const CENTER_LERP_MIN = 0.1;
 const CENTER_LERP_MAX = 0.7;
 const BASE_NUDGE_INTERVAL_MS = 1500;
 const BASE_NUDGE_VELOCITY = 0.5;
-const POSITION_STORAGE_KEY = "bachelor:blob-center";
+const POSITION_STORAGE_KEY = "amorphous-blob:blob-center";
 const PERSIST_INTERVAL_MS = 500;
 
 const randomBetween = (min, max) => min + Math.random() * (max - min);

@@ -319,6 +319,8 @@ export const useBlobFace = () => {
     };
 
     const stopEyeFollow = () => {
+        const shouldRestorePreset = isFollowing && followPreviousPreset;
+
         if (followFrameId) {
             window.cancelAnimationFrame(followFrameId);
             followFrameId = undefined;
@@ -326,7 +328,9 @@ export const useBlobFace = () => {
         isFollowing = false;
         followGetter = null;
         eyesOffset.value = { x: 0, y: 0 };
-        setFace(followPreviousPreset || "default");
+        if (shouldRestorePreset) {
+            setFace(followPreviousPreset);
+        }
         followPreviousPreset = null;
     };
 

@@ -239,9 +239,11 @@ export const useMicroJournal = () => {
         promptIndex.value = next;
     };
 
-    const resetDraft = ({ rotatePromptAfterReset = false } = {}) => {
+    const resetDraft = ({ rotatePromptAfterReset = false, preserveEmotion = false } = {}) => {
         journalText.value = "";
-        selectedEmotion.value = "";
+        if (!preserveEmotion) {
+            selectedEmotion.value = "";
+        }
         if (rotatePromptAfterReset) {
             rotatePrompt();
         }
@@ -286,7 +288,7 @@ export const useMicroJournal = () => {
 
             const nextEntries = [entry, ...entries.value].slice(0, MAX_STORED_ENTRIES);
             entries.value = nextEntries;
-            resetDraft({ rotatePromptAfterReset: true });
+            resetDraft({ rotatePromptAfterReset: true, preserveEmotion: true });
             isSecret.value = false;
 
             return entry;

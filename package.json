@@ -1,5 +1,5 @@
 {
-  "name": "bachelor",
+  "name": "amorphous-blob",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -25,8 +25,8 @@
   },
   "main": "electron/main.cjs",
   "build": {
-    "appId": "com.yourname.bachelor",
-    "productName": "Bachelor",
+    "appId": "com.yourname.amorphous-blob",
+    "productName": "Amorphous Blob",
     "directories": {
       "buildResources": "public",
       "output": "dist_electron"

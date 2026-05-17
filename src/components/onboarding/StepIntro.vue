@@ -1,6 +1,7 @@
 <template>
     <section>
-        <h1 class="title">Meet your Blob</h1>
+        <h1 class="title">Amorphous Blob</h1>
+        <p class="description">A desktop presence as self-reflection</p>
         <div class="boxes">
             <div class="box">
                 <div class="box-left">
@@ -31,9 +32,9 @@
 
             <div class="box">
                 <div class="box-left">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-4">
                         <path fill-rule="evenodd"
-                            d="M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0ZM6 8c.552 0 1-.672 1-1.5S6.552 5 6 5s-1 .672-1 1.5S5.448 8 6 8Zm5-1.5c0 .828-.448 1.5-1 1.5s-1-.672-1-1.5S9.448 5 10 5s1 .672 1 1.5Zm.005 4.245a.75.75 0 0 0-1.06 0 2.75 2.75 0 0 1-3.89 0 .75.75 0 0 0-1.06 1.06 4.25 4.25 0 0 0 6.01 0 .75.75 0 0 0 0-1.06Z"
+                            d="M8 1.75a.75.75 0 0 1 .692.462l1.41 3.393 3.664.293a.75.75 0 0 1 .428 1.317l-2.791 2.39.853 3.575a.75.75 0 0 1-1.12.814L7.998 12.08l-3.135 1.915a.75.75 0 0 1-1.12-.814l.852-3.574-2.79-2.39a.75.75 0 0 1 .427-1.318l3.663-.293 1.41-3.393A.75.75 0 0 1 8 1.75Z"
                             clip-rule="evenodd" />
                     </svg>
                 </div>
@@ -64,7 +65,7 @@ h2 {
 .box {
     padding: 2rem;
     border-radius: 1rem;
-    background: linear-gradient(to right, var(--secondary), transparent);
+    background: linear-gradient(to right, color-mix(in oklch, var(--secondary) 50%, transparent), transparent);
     display: flex;
     gap: 2rem;
 }
@@ -79,7 +80,7 @@ h2 {
 .box-left svg {
     width: 3rem;
     height: 3rem;
-    fill: var(--darker);
+    fill: var(--primary);
 }
 
 .box-right {
