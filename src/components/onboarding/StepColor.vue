@@ -179,7 +179,7 @@ onBeforeUnmount(() => {
 .hue-picker::before {
     content: "";
     position: absolute;
-    inset: 0.75rem;
+    inset: 0.8rem;
     border-radius: 50%;
     background: conic-gradient(in oklch longer hue, oklch(71% 0.16 0deg), oklch(71% 0.16 360deg));
 }

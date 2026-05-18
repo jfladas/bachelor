@@ -343,6 +343,14 @@ const handleUnlockEntry = async () => {
     showPasswordModal.value = true;
 };
 
+const handleDeleteEntry = async (entryId) => {
+    try {
+        await journal.deleteEntry(entryId);
+    } catch (err) {
+        console.error('Failed to delete entry', err);
+    }
+};
+
 const handlePasswordSetupComplete = async () => {
     showPasswordModal.value = false;
     // resolve any pending submit waiting for PIN setup
@@ -443,7 +451,8 @@ onBeforeUnmount(() => {
             :text-visible="journalTextVisible" @update:prompt-visible="journalPromptVisible = $event"
             @update:emotion-visible="journalEmotionVisible = $event" @update:text-visible="journalTextVisible = $event"
             @close="closeMenu" @select-emotion="setEmotionTag" @rotate-prompt="rotatePrompt"
-            @update:text="setJournalText" @submit="submitJournal" @unlock-entries="handleUnlockEntry" />
+            @update:text="setJournalText" @submit="submitJournal" @unlock-entries="handleUnlockEntry"
+            @delete-entry="handleDeleteEntry" />
 
         <Transition name="overlay-fade" appear>
             <PasswordSetup v-if="showPasswordModal" @password-set="handlePasswordSetupComplete"

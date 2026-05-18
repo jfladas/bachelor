@@ -73,3 +73,44 @@
     bottom: 1.5rem;
     right: 2rem;
 }
+
+[data-tooltip] {
+    position: relative;
+}
+
+[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 50%;
+    bottom: 100%;
+    padding: 0.4rem 0.8rem;
+    border-radius: 1rem;
+    background: var(--secondary);
+    color: var(--text);
+    font-size: 0.78rem;
+    font-weight: 500;
+    white-space: nowrap;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, -0.3rem);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::after {
+    opacity: 1;
+    transform: translate(-50%, -0.6rem);
+}
+
+[data-tooltip]:hover::before {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    width: 120%;
+    height: 120%;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: -1;
+}

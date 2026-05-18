@@ -41,13 +41,16 @@
       "target": [
         "nsis",
         "portable"
-      ]
+      ],
+      "icon": "electron/assets/icon.ico"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowElevation": true,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "electron/assets/icon.ico",
+      "uninstallerIcon": "electron/assets/icon.ico"
     }
   }
 }

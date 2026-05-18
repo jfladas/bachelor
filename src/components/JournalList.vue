@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import Button from './Button.vue'
 
 const props = defineProps({
@@ -21,7 +21,28 @@ const props = defineProps({
     },
 })
 
-const emit = defineEmits(['unlock-entries'])
+const emit = defineEmits(['unlock-entries', 'delete-entry'])
+
+const activeContextId = ref(null)
+let _hideListener = null
+
+const showContextFor = (entry) => {
+    activeContextId.value = entry?.id ?? null
+}
+
+const handleDelete = (entryId) => {
+    emit('delete-entry', entryId)
+    activeContextId.value = null
+}
+
+onMounted(() => {
+    _hideListener = () => (activeContextId.value = null)
+    document.addEventListener('click', _hideListener)
+})
+
+onBeforeUnmount(() => {
+    if (_hideListener) document.removeEventListener('click', _hideListener)
+})
 
 const sortedEntries = computed(() => {
     return [...(props.entries || [])].sort((a, b) => {
@@ -90,7 +111,8 @@ const getEntryText = (entry) => {
             <p class="description">No entries yet. Start writing to create your first entry!</p>
         </div>
 
-        <div v-for="entry in sortedEntries" :key="entry.id" class="entry-item">
+        <div v-for="entry in sortedEntries" :key="entry.id" class="entry-item"
+            @contextmenu.prevent.stop="showContextFor(entry)" @click="activeContextId = null">
             <div class="entry-content" :class="{ blurred: isEntryLocked(entry) }">
                 <div class="entry-header">
                     <span v-if="entry.emotion" class="emotion-badge">
@@ -98,7 +120,15 @@ const getEntryText = (entry) => {
                             v-html="emotionTag(entry.emotion).svg"></span>
                         <span>{{ emotionLabel(entry.emotion) }}</span>
                     </span>
-                    <span class="entry-date">{{ formatDate(entry.createdAt) }}</span>
+                    <span class="entry-date">
+                        {{ formatDate(entry.createdAt) }}
+                        <svg v-if="entry.isSecret" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"
+                            class="size-4 lock-icon">
+                            <path fill-rule="evenodd"
+                                d="M8 1a3.5 3.5 0 0 0-3.5 3.5V7A1.5 1.5 0 0 0 3 8.5v5A1.5 1.5 0 0 0 4.5 15h7a1.5 1.5 0 0 0 1.5-1.5v-5A1.5 1.5 0 0 0 11.5 7V4.5A3.5 3.5 0 0 0 8 1Zm2 6V4.5a2 2 0 1 0-4 0V7h4Z"
+                                clip-rule="evenodd" />
+                        </svg>
+                    </span>
                 </div>
 
                 <p v-if="entry.text || isEntryLocked(entry)" class="entry-text">{{ getEntryText(entry) }}</p>
@@ -109,6 +139,22 @@ const getEntryText = (entry) => {
             <div v-if="isEntryLocked(entry)" class="locked-overlay">
                 <Button variant="secondary" class="unlock-button" @click="handleUnlock(entry.id)">
                     Unlock Secret Entries
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-4">
+                        <path
+                            d="M11.5 1A3.5 3.5 0 0 0 8 4.5V7H2.5A1.5 1.5 0 0 0 1 8.5v5A1.5 1.5 0 0 0 2.5 15h7a1.5 1.5 0 0 0 1.5-1.5v-5A1.5 1.5 0 0 0 9.5 7V4.5a2 2 0 1 1 4 0v1.75a.75.75 0 0 0 1.5 0V4.5A3.5 3.5 0 0 0 11.5 1Z" />
+                    </svg>
+                </Button>
+            </div>
+
+            <!-- Right-click context delete overlay -->
+            <div v-if="activeContextId === entry.id" class="context-overlay" @click.stop>
+                <Button variant="secondary circle-small" class="unlock-button delete-button" data-tooltip="Delete"
+                    @click.stop="handleDelete(entry.id)">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-4">
+                        <path fill-rule="evenodd"
+                            d="M5 3.25V4H2.75a.75.75 0 0 0 0 1.5h.3l.815 8.15A1.5 1.5 0 0 0 5.357 15h5.285a1.5 1.5 0 0 0 1.493-1.35l.815-8.15h.3a.75.75 0 0 0 0-1.5H11v-.75A2.25 2.25 0 0 0 8.75 1h-1.5A2.25 2.25 0 0 0 5 3.25Zm2.25-.75a.75.75 0 0 0-.75.75V4h3v-.75a.75.75 0 0 0-.75-.75h-1.5ZM6.05 6a.75.75 0 0 1 .787.713l.275 5.5a.75.75 0 0 1-1.498.075l-.275-5.5A.75.75 0 0 1 6.05 6Zm3.9 0a.75.75 0 0 1 .712.787l-.275 5.5a.75.75 0 0 1-1.498-.075l.275-5.5a.75.75 0 0 1 .786-.711Z"
+                            clip-rule="evenodd" />
+                    </svg>
                 </Button>
             </div>
         </div>
@@ -119,6 +165,7 @@ const getEntryText = (entry) => {
 .entries-list {
     height: 100%;
     overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     flex-direction: column-reverse;
     align-items: stretch;
@@ -170,6 +217,21 @@ const getEntryText = (entry) => {
     backdrop-filter: blur(2px);
 }
 
+.context-overlay {
+    position: absolute;
+    bottom: 0.5rem;
+    right: 0.5rem;
+    z-index: 20;
+    pointer-events: all;
+    display: flex;
+    align-items: center;
+}
+
+.delete-button {
+    display: inline-flex;
+    align-items: center;
+}
+
 .entry-header {
     display: flex;
     align-items: center;
@@ -185,7 +247,7 @@ const getEntryText = (entry) => {
     background: linear-gradient(to right, var(--secondary) 50%, transparent);
     border-radius: 0.5rem;
     color: var(--text);
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 500;
 }
 
@@ -197,9 +259,18 @@ const getEntryText = (entry) => {
     transform: scale(0.9);
 }
 
+.lock-icon {
+    width: 0.8rem;
+    height: 0.8rem;
+    margin-left: 0.2rem;
+    fill: currentColor;
+}
+
 .entry-date {
     color: var(--text);
     margin-left: auto;
+    display: flex;
+    align-items: center;
 }
 
 .entry-text {

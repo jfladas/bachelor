@@ -31,6 +31,7 @@ function setJournalUnlocked(nextUnlocked) {
 // server at localhost. This avoids relying on NODE_ENV which may not be set.
 const isDev = !app.isPackaged;
 const devServerUrl = "http://localhost:5173";
+const appIconPath = path.join(__dirname, "assets", process.platform === "win32" ? "icon.ico" : "icon.png");
 const onboardingStatePath = path.join(app.getPath('userData'), 'onboarding-state.json');
 const onboardingDefaults = {
     completed: false,
@@ -543,6 +544,7 @@ app.whenReady().then(async () => {
         skipTaskbar: true,
         resizable: false,
         hasShadow: false,
+        icon: appIconPath,
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
@@ -581,6 +583,10 @@ app.whenReady().then(async () => {
         setJournalUnlocked(false);
     });
 
+    powerMonitor.on('resume', () => {
+        showMainWindow();
+    });
+
     if (isDev) {
         try {
             await waitForDevServer(devServerUrl);
@@ -609,10 +615,7 @@ app.whenReady().then(async () => {
     mainWindow.setIgnoreMouseEvents(initialOnboardingState.completed, { forward: true });
 
     try {
-        const isWin = process.platform === 'win32';
-        const iconName = isWin ? 'icon.ico' : 'icon.png';
-        const trayIconPath = path.join(__dirname, "assets", iconName);
-        let trayIcon = nativeImage.createFromPath(trayIconPath);
+        let trayIcon = nativeImage.createFromPath(appIconPath);
 
         if (trayIcon.isEmpty()) {
             trayIcon = await app.getFileIcon(process.execPath, { size: "small" });
@@ -646,7 +649,7 @@ app.whenReady().then(async () => {
 
         trayMenuTemplate.push(
             {
-                label: "Reset Onboarding",
+                label: "Reset",
                 click: async () => {
                     const didReset = resetOnboardingState();
                     const didResetJournal = resetJournalState();

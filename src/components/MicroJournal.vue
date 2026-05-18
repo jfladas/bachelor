@@ -68,6 +68,7 @@ const emit = defineEmits([
     "update:text-visible",
     "submit",
     "unlock-entries",
+    "delete-entry",
 ]);
 
 const isSecretEntry = ref(false);
@@ -149,6 +150,54 @@ const handleUnlockEntry = (entryId) => {
     emit("unlock-entries", entryId);
 };
 
+const handleDeleteEntry = (entryId) => {
+    emit('delete-entry', entryId);
+};
+
+const pointerDownPos = ref({ x: 0, y: 0 })
+const pointerDownInsideEntry = ref(false)
+const pointerDownInsideScrollbar = ref(false)
+
+const handleListAreaClick = (event) => {
+    if (pointerDownInsideEntry.value || pointerDownInsideScrollbar.value) return;
+
+    const dx = (event.clientX || 0) - (pointerDownPos.value.x || 0)
+    const dy = (event.clientY || 0) - (pointerDownPos.value.y || 0)
+    const distSq = dx * dx + dy * dy
+    if (distSq > 36) return
+
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : event.path || [];
+    for (let node of path) {
+        if (node && node.classList && node.classList.contains && node.classList.contains('entry-item')) {
+            return;
+        }
+    }
+
+    emit('close');
+};
+
+const onListPointerDown = (event) => {
+    pointerDownPos.value = { x: event.clientX || 0, y: event.clientY || 0 }
+    pointerDownInsideEntry.value = false
+    pointerDownInsideScrollbar.value = false
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : event.path || [];
+    for (let node of path) {
+        if (node && node.classList && node.classList.contains) {
+            if (node.classList.contains('entry-item')) {
+                pointerDownInsideEntry.value = true
+                break
+            }
+            if (node.classList.contains('entries-list') && node.getBoundingClientRect) {
+                const rect = node.getBoundingClientRect()
+                const scrollbarArea = 18
+                if ((event.clientX || 0) >= rect.right - scrollbarArea) {
+                    pointerDownInsideScrollbar.value = true
+                }
+            }
+        }
+    }
+}
+
 const listAreaStyle = computed(() => {
     const style = { ...props.panelStyle };
     if (windowHeight.value > 0) {
@@ -162,9 +211,10 @@ const listAreaStyle = computed(() => {
 
 <template>
     <div v-if="props.visible">
-        <section v-show="showJournalList" class="list-area" :style="listAreaStyle">
+        <section v-show="showJournalList" class="list-area" :style="listAreaStyle" @click="handleListAreaClick"
+            @pointerdown="onListPointerDown">
             <JournalList :visible="showJournalList" :entries="props.entries" :emotion-tags="props.emotionTags"
-                :is-unlocked="props.isUnlocked" @unlock-entries="handleUnlockEntry" />
+                :is-unlocked="props.isUnlocked" @unlock-entries="handleUnlockEntry" @delete-entry="handleDeleteEntry" />
         </section>
         <div v-show="showJournalList" class="list-shadow" :style="props.panelStyle"></div>
         <section class="window" :style="props.panelStyle" role="dialog" aria-label="Micro journal" ref="windowEl">
@@ -172,7 +222,8 @@ const listAreaStyle = computed(() => {
                 <p class="eyebrow">Micro Journal</p>
                 <div class="header-buttons">
                     <Button variant="secondary list-button circle-small" aria-label="View journal entries"
-                        @click="toggleJournalList" :class="{ active: showJournalList }">
+                        :data-tooltip="showJournalList ? 'Hide list' : 'Show list'" @click="toggleJournalList"
+                        :class="{ active: showJournalList }">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-4">
                             <path
                                 d="M2 4a2 2 0 0 1 2-2h8a2 2 0 1 1 0 4H4a2 2 0 0 1-2-2ZM2 9.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 9.25ZM2.75 12.5a.75.75 0 0 0 0 1.5h10.5a.75.75 0 0 0 0-1.5H2.75Z" />
@@ -212,7 +263,7 @@ const listAreaStyle = computed(() => {
                 <div class="prompt-field field">
 
                     <p class="prompt">{{ props.prompt || "Just write anything." }}</p>
-                    <Button variant="secondary circle-small" @click="$emit('rotate-prompt')">
+                    <Button variant="secondary circle-small" data-tooltip="New prompt" @click="$emit('rotate-prompt')">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
                             <path fill-rule="evenodd"
                                 d="M13.836 2.477a.75.75 0 0 1 .75.75v3.182a.75.75 0 0 1-.75.75h-3.182a.75.75 0 0 1 0-1.5h1.37l-.84-.841a4.5 4.5 0 0 0-7.08.932.75.75 0 0 1-1.3-.75 6 6 0 0 1 9.44-1.242l.842.84V3.227a.75.75 0 0 1 .75-.75Zm-.911 7.5A.75.75 0 0 1 13.199 11a6 6 0 0 1-9.44 1.241l-.84-.84v1.371a.75.75 0 0 1-1.5 0V9.591a.75.75 0 0 1 .75-.75H5.35a.75.75 0 0 1 0 1.5H3.98l.841.841a4.5 4.5 0 0 0 7.08-.932.75.75 0 0 1 1.025-.273Z"
@@ -292,7 +343,7 @@ const listAreaStyle = computed(() => {
     top: 0;
     padding: 0 1.8rem;
     border-radius: 2rem;
-    pointer-events: none;
+    pointer-events: auto;
 }
 
 .window {
