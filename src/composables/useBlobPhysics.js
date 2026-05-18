@@ -14,6 +14,7 @@ const CENTER_LERP_MIN = 0.1;
 const CENTER_LERP_MAX = 0.7;
 const BASE_NUDGE_INTERVAL_MS = 1500;
 const BASE_NUDGE_VELOCITY = 0.5;
+const IDLE_NUDGE_BLEND = 0.8;
 const POSITION_STORAGE_KEY = "amorphous-blob:blob-center";
 const PERSIST_INTERVAL_MS = 500;
 
@@ -533,6 +534,30 @@ export const useBlobPhysics = ({ ballRadii, activity, ipcRenderer }) => {
         nextIdleNudgeAt = now + delayMs;
     };
 
+    const getIdleNudgeDirection = () => {
+        const center = getBallClusterCenter();
+        if (!center) {
+            return Math.random() < 0.5 ? -1 : 1;
+        }
+
+        const { width } = getViewportBounds();
+        const xRatio = center.x / Math.max(1, width);
+
+        if (xRatio <= 0.2) {
+            const edgeProgress = Math.min(1, Math.max(0, xRatio / 0.8));
+            const towardCenterChance = lerp(0.9, 0.5, edgeProgress);
+            return Math.random() < towardCenterChance ? 1 : -1;
+        }
+
+        if (xRatio >= 0.8) {
+            const edgeProgress = Math.min(1, Math.max(0, (1 - xRatio) / 0.8));
+            const towardCenterChance = lerp(0.9, 0.5, edgeProgress);
+            return Math.random() < towardCenterChance ? -1 : 1;
+        }
+
+        return Math.random() < 0.5 ? -1 : 1;
+    };
+
     const didDragRecently = (windowMs = 180) => {
         if (!lastDragMoveAt) {
             return false;
@@ -589,9 +614,9 @@ export const useBlobPhysics = ({ ballRadii, activity, ipcRenderer }) => {
         }
 
         const activityLevel = activity.value;
-        const direction = Math.random() < 0.5 ? -1 : 1;
-        const minVelocity = lerp(BASE_NUDGE_VELOCITY, BASE_NUDGE_VELOCITY * 2, activityLevel);
-        const maxVelocity = lerp(BASE_NUDGE_VELOCITY * 2, BASE_NUDGE_VELOCITY * 4, activityLevel);
+        const direction = getIdleNudgeDirection();
+        const minVelocity = lerp(BASE_NUDGE_VELOCITY, BASE_NUDGE_VELOCITY * 3, activityLevel);
+        const maxVelocity = lerp(BASE_NUDGE_VELOCITY * 2, BASE_NUDGE_VELOCITY * 5, activityLevel);
         const velocityBoost = randomBetween(minVelocity, maxVelocity) * direction;
 
         ballBodies.forEach((body) => {
@@ -600,7 +625,7 @@ export const useBlobPhysics = ({ ballRadii, activity, ipcRenderer }) => {
             }
 
             Body.setVelocity(body, {
-                x: body.velocity.x + velocityBoost,
+                x: lerp(body.velocity.x, body.velocity.x + velocityBoost, IDLE_NUDGE_BLEND),
                 y: body.velocity.y,
             });
         });
