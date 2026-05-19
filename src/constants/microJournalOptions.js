@@ -15,7 +15,7 @@ const happyFaceSvg = `
     </g>
 </svg>
 `;
-const defaultFaceSvg = `
+const contentFaceSvg = `
 <svg width="16px" height="16px" viewBox="0 0 362 334" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
     <g transform="matrix(1,0,0,1,-1084.010811,-666.615346)">
         <g>
@@ -32,7 +32,7 @@ const defaultFaceSvg = `
     </g>
 </svg>
 `;
-const neutralFaceSvg = `
+const anxiousFaceSvg = `
 <svg width="16px" height="16px" viewBox="0 0 363 294" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
     <g transform="matrix(1,0,0,1,-1085.484709,-1210.49176)">
         <g transform="matrix(1,0,0,1,-0,-15.629863)">
@@ -104,9 +104,9 @@ const surprisedFaceSvg = `
 
 export const journalEmotions = [
     { id: "excited", label: "Excited", svg: happyFaceSvg },
-    { id: "content", label: "Content", svg: defaultFaceSvg },
-    { id: "anxious", label: "Anxious", svg: neutralFaceSvg },
+    { id: "content", label: "Content", svg: contentFaceSvg },
     { id: "sad", label: "Sad", svg: sadFaceSvg },
+    { id: "anxious", label: "Anxious", svg: anxiousFaceSvg },
     { id: "angry", label: "Angry", svg: angryFaceSvg },
 ];
 

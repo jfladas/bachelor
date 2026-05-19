@@ -97,16 +97,16 @@ export const calculateAssignedProfile = ({ sliders, traits, hue }) => {
 
     const calculatedSymmetry =
         0.25 +
-        (normalizedTraits.includes("grounded") ? 0.25 : 0) -
-        (normalizedTraits.includes("creative") ? 0.25 : 0) +
-        (normalizedTraits.includes("chill") ? 0.5 : 0);
+        (normalizedTraits.includes("grounded") ? 0.5 : 0) -
+        (normalizedTraits.includes("creative") ? 0.5 : 0) +
+        (normalizedTraits.includes("chill") ? 0.25 : 0);
 
     const calculatedVariability =
         normalizedSliders.rationalEmotional * 0.5 + (normalizedTraits.includes("mysterious") ? 0.5 : 0);
 
     const calculatedActivity =
-        normalizedSliders.calmAssertive * 0.3 +
-        (normalizedTraits.includes("gentle") ? 0 : 0.2) +
+        normalizedSliders.calmAssertive * 0.25 +
+        (normalizedTraits.includes("gentle") ? 0 : 0.25) +
         (normalizedTraits.includes("active") ? 0.5 : 0);
 
     const calculatedReaction = normalizedTraits.includes("cute")

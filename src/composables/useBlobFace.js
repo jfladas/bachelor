@@ -5,7 +5,8 @@ const VIEWBOX = { width: 363, height: 180 };
 
 import eyesDefaultRaw from "../assets/face/eyes_default.svg?raw";
 import eyesHappyRaw from "../assets/face/eyes_happy.svg?raw";
-import eyesNeutralRaw from "../assets/face/eyes_neutral.svg?raw";
+import eyesContentRaw from "../assets/face/eyes_content.svg?raw";
+import eyesAnxiousRaw from "../assets/face/eyes_anxious.svg?raw";
 import eyesSadRaw from "../assets/face/eyes_sad.svg?raw";
 import eyesAngryRaw from "../assets/face/eyes_angry.svg?raw";
 import eyesSurprisedRaw from "../assets/face/eyes_surprised.svg?raw";
@@ -13,7 +14,8 @@ import eyesClosedRaw from "../assets/face/eyes_closed.svg?raw";
 
 import mouthDefaultRaw from "../assets/face/mouth_default.svg?raw";
 import mouthHappyRaw from "../assets/face/mouth_happy.svg?raw";
-import mouthNeutralRaw from "../assets/face/mouth_neutral.svg?raw";
+import mouthContentRaw from "../assets/face/mouth_content.svg?raw";
+import mouthAnxiousRaw from "../assets/face/mouth_anxious.svg?raw";
 import mouthSadRaw from "../assets/face/mouth_sad.svg?raw";
 import mouthAngryRaw from "../assets/face/mouth_angry.svg?raw";
 import mouthSurprisedRaw from "../assets/face/mouth_surprised.svg?raw";
@@ -136,15 +138,19 @@ const shiftPathsY = (paths, deltaY) => {
 const FACE_PRESETS = {
     default: {
         eyes: extractPathsFromSvg(eyesDefaultRaw, VIEWBOX),
-        mouth: shiftPathsY(extractPathsFromSvg(mouthDefaultRaw, VIEWBOX), 30),
+        mouth: extractPathsFromSvg(mouthDefaultRaw, VIEWBOX),
     },
     happy: {
         eyes: extractPathsFromSvg(eyesHappyRaw, VIEWBOX),
         mouth: shiftPathsY(extractPathsFromSvg(mouthHappyRaw, VIEWBOX), 40),
     },
-    neutral: {
-        eyes: extractPathsFromSvg(eyesNeutralRaw, VIEWBOX),
-        mouth: extractPathsFromSvg(mouthNeutralRaw, VIEWBOX),
+    content: {
+        eyes: extractPathsFromSvg(eyesContentRaw, VIEWBOX),
+        mouth: shiftPathsY(extractPathsFromSvg(mouthContentRaw, VIEWBOX), 30),
+    },
+    anxious: {
+        eyes: extractPathsFromSvg(eyesAnxiousRaw, VIEWBOX),
+        mouth: extractPathsFromSvg(mouthAnxiousRaw, VIEWBOX),
     },
     sad: {
         eyes: extractPathsFromSvg(eyesSadRaw, VIEWBOX),
@@ -164,8 +170,8 @@ const CLOSED_EYES = extractPathsFromSvg(eyesClosedRaw, VIEWBOX);
 
 const EMOTION_FACE_PRESETS = {
     excited: "happy",
-    content: "default",
-    anxious: "neutral",
+    content: "content",
+    anxious: "anxious",
     sad: "sad",
     angry: "angry",
 };

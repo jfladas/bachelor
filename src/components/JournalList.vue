@@ -108,22 +108,23 @@ const getEntryText = (entry) => {
 <template>
     <div class="entries-list">
         <div v-if="sortedEntries.length === 0" class="empty-state">
-            <p class="description">No entries yet. Start writing to create your first entry!</p>
+            <p class="description">Create your first entry!</p>
         </div>
 
         <div v-for="entry in sortedEntries" :key="entry.id" class="entry-item"
             @contextmenu.prevent.stop="showContextFor(entry)" @click="activeContextId = null">
             <div class="entry-content" :class="{ blurred: isEntryLocked(entry) }">
                 <div class="entry-header">
-                    <span v-if="entry.emotion" class="emotion-badge">
+                    <span v-if="entry.emotion" class="emotion-badge"
+                        :style="{ '--emotion-hue': `var(--${entry.emotion})` }">
                         <span v-if="emotionTag(entry.emotion)?.svg" class="emotion-icon"
                             v-html="emotionTag(entry.emotion).svg"></span>
                         <span>{{ emotionLabel(entry.emotion) }}</span>
                     </span>
                     <span class="entry-date">
                         {{ formatDate(entry.createdAt) }}
-                        <svg v-if="entry.isSecret" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"
-                            class="size-4 lock-icon">
+                        <svg v-if="entry.isSecret" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
+                            fill="currentColor" class="size-4 lock-icon">
                             <path fill-rule="evenodd"
                                 d="M8 1a3.5 3.5 0 0 0-3.5 3.5V7A1.5 1.5 0 0 0 3 8.5v5A1.5 1.5 0 0 0 4.5 15h7a1.5 1.5 0 0 0 1.5-1.5v-5A1.5 1.5 0 0 0 11.5 7V4.5A3.5 3.5 0 0 0 8 1Zm2 6V4.5a2 2 0 1 0-4 0V7h4Z"
                                 clip-rule="evenodd" />
@@ -178,13 +179,14 @@ const getEntryText = (entry) => {
     padding: 1rem;
     text-align: center;
     border-radius: 1rem 1rem 0 0;
-    background: radial-gradient(circle, white, var(--white));
+    background: radial-gradient(circle, white, color-mix(in oklch, var(--white) 50%, white));
+    box-shadow: 0 0 0.5rem color-mix(in oklch, var(--shadow) 50%, transparent);
 }
 
 .entry-item {
     position: relative;
     padding: 1rem;
-    background: radial-gradient(circle, white, var(--white));
+    background: radial-gradient(circle, white, color-mix(in oklch, var(--white) 50%, white));
     box-shadow: 0 0 0.5rem color-mix(in oklch, var(--shadow) 50%, transparent);
     color: var(--text-strong);
     border-radius: 1rem;
@@ -244,9 +246,11 @@ const getEntryText = (entry) => {
     align-items: center;
     gap: 0.4rem;
     padding: 0.3rem 0.5rem;
-    background: linear-gradient(to right, var(--secondary) 50%, transparent);
+    background: radial-gradient(circle at 1rem 50% in oklch,
+            oklch(var(--secondary-l) var(--secondary-c) var(--emotion-hue)) 25%,
+            transparent);
     border-radius: 0.5rem;
-    color: var(--text);
+    color: oklch(var(--text-l) var(--text-c) var(--emotion-hue));
     font-size: 0.8rem;
     font-weight: 500;
 }

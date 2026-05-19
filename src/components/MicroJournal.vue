@@ -155,11 +155,10 @@ const handleDeleteEntry = (entryId) => {
 };
 
 const pointerDownPos = ref({ x: 0, y: 0 })
-const pointerDownInsideEntry = ref(false)
 const pointerDownInsideScrollbar = ref(false)
 
 const handleListAreaClick = (event) => {
-    if (pointerDownInsideEntry.value || pointerDownInsideScrollbar.value) return;
+    if (pointerDownInsideScrollbar.value) return;
 
     const dx = (event.clientX || 0) - (pointerDownPos.value.x || 0)
     const dy = (event.clientY || 0) - (pointerDownPos.value.y || 0)
@@ -168,7 +167,7 @@ const handleListAreaClick = (event) => {
 
     const path = typeof event.composedPath === 'function' ? event.composedPath() : event.path || [];
     for (let node of path) {
-        if (node && node.classList && node.classList.contains && node.classList.contains('entry-item')) {
+        if (node && node.classList && node.classList.contains && (node.classList.contains('entry-item') || node.classList.contains('empty-state'))) {
             return;
         }
     }
@@ -178,15 +177,10 @@ const handleListAreaClick = (event) => {
 
 const onListPointerDown = (event) => {
     pointerDownPos.value = { x: event.clientX || 0, y: event.clientY || 0 }
-    pointerDownInsideEntry.value = false
     pointerDownInsideScrollbar.value = false
     const path = typeof event.composedPath === 'function' ? event.composedPath() : event.path || [];
     for (let node of path) {
         if (node && node.classList && node.classList.contains) {
-            if (node.classList.contains('entry-item')) {
-                pointerDownInsideEntry.value = true
-                break
-            }
             if (node.classList.contains('entries-list') && node.getBoundingClientRect) {
                 const rect = node.getBoundingClientRect()
                 const scrollbarArea = 18
@@ -285,7 +279,8 @@ const listAreaStyle = computed(() => {
                 <div class="emotion-field field">
 
                     <Button v-for="tag in props.emotionTags" :key="tag.id" variant="secondary" class="emotion-chip"
-                        :class="{ active: props.selectedEmotion === tag.id }" @click="$emit('select-emotion', tag.id)">
+                        :class="[tag.id, { active: props.selectedEmotion === tag.id }]"
+                        :style="{ '--emotion-hue': `var(--${tag.id})` }" @click="$emit('select-emotion', tag.id)">
                         <div class="icon" v-html="tag.svg"></div>
                         <div v-if="props.selectedEmotion === tag.id">{{ tag.label }}</div>
                     </Button>
@@ -413,6 +408,11 @@ const listAreaStyle = computed(() => {
     background: var(--secondary);
 }
 
+.remove-option:focus-visible {
+    outline: 3px solid var(--lighter);
+    outline-offset: 2px;
+}
+
 .label {
     margin: 0.5rem 0 0.5rem 0;
     font-size: 1rem;
@@ -460,7 +460,7 @@ const listAreaStyle = computed(() => {
     padding: 0.8rem 1rem;
     font-weight: 600;
     color: var(--white);
-    background: var(--darker);
+    background: oklch(var(--darker-l) var(--darker-c) var(--emotion-hue));
 }
 
 .emotion-chip.active .icon {
@@ -468,7 +468,7 @@ const listAreaStyle = computed(() => {
 }
 
 .emotion-chip.active:hover {
-    background: var(--primary);
+    background: oklch(var(--primary-l) var(--primary-c) var(--emotion-hue));
 }
 
 .secret-toggle {

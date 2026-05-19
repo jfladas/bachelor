@@ -95,6 +95,20 @@ const {
     isPinProtected,
 } = journal;
 
+const DEFAULT_FACE_EMOTION = "default";
+const latestSubmittedEmotion = ref(DEFAULT_FACE_EMOTION);
+const visualEmotion = ref(DEFAULT_FACE_EMOTION);
+
+const applyFaceEmotion = (emotionId) => {
+    const nextEmotion = emotionId || DEFAULT_FACE_EMOTION;
+    visualEmotion.value = nextEmotion;
+    setFace(nextEmotion);
+};
+
+const resolveLatestSubmittedEmotion = () => {
+    return entries.value[0]?.emotion || DEFAULT_FACE_EMOTION;
+};
+
 const menuOpen = ref(false);
 const journalOpen = ref(false);
 const journalPanelSide = ref(null);
@@ -243,12 +257,18 @@ const syncMenuState = () => {
 };
 
 const closeMenu = ({ clearDraft = false } = {}) => {
+    const wasJournalOpen = journalOpen.value;
+
     menuOpen.value = false;
     journalOpen.value = false;
     journalPanelSide.value = null;
     lockedPanelStyle.value = null;
     secMenuOpen.value = false;
     syncMenuState();
+
+    if (wasJournalOpen) {
+        applyFaceEmotion(latestSubmittedEmotion.value);
+    }
 
     if (clearDraft) {
         resetDraft();
@@ -330,6 +350,9 @@ const submitJournal = async (entryOptions = {}) => {
             return;
         }
 
+        latestSubmittedEmotion.value = savedEntry.emotion || DEFAULT_FACE_EMOTION;
+        applyFaceEmotion(latestSubmittedEmotion.value);
+
         jump();
         blobState.setState(STATES.IDLE);
     } catch (err) {
@@ -371,11 +394,22 @@ const handlePasswordSetupCancel = async () => {
 };
 
 watch(
+    entries,
+    () => {
+        if (selectedEmotion.value) {
+            return;
+        }
+
+        latestSubmittedEmotion.value = resolveLatestSubmittedEmotion();
+        applyFaceEmotion(latestSubmittedEmotion.value);
+    },
+    { immediate: true }
+);
+
+watch(
     selectedEmotion,
     (emotionId) => {
-        if (emotionId) {
-            setFace(emotionId);
-        }
+        applyFaceEmotion(emotionId || DEFAULT_FACE_EMOTION);
     },
     { immediate: true }
 );
@@ -432,8 +466,8 @@ onBeforeUnmount(() => {
             :face-style="faceStyle" :face-parts="faceParts"
             :face-eyes-style="{ transform: `translateY(-175%) translate(${eyesOffset.x}px, ${eyesOffset.y}px)`, transition: 'transform 0.3s ease' }"
             :outline-points="outlinePoints" :positions="positions" :blob-area-ref="setBlobAreaRef"
-            :blob-edge-ref="setBlobEdgeRef" :is-active="menuOpen || journalOpen || secMenuOpen" @start-drag="startDrag"
-            @open-menu="openMenu" @open-sec-menu="openSecMenu" :state="blobState.state.value" />
+            :blob-edge-ref="setBlobEdgeRef" :emotion="visualEmotion" :is-active="menuOpen || journalOpen || secMenuOpen"
+            @start-drag="startDrag" @open-menu="openMenu" @open-sec-menu="openSecMenu" :state="blobState.state.value" />
 
         <button v-if="menuOpen || journalOpen || secMenuOpen" class="menu-backdrop" aria-label="Close menu"
             @click="closeMenu" tabindex="-1" />

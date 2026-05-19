@@ -66,6 +66,9 @@ h2 {
     padding: 2rem;
     border-radius: 1rem;
     background: linear-gradient(to right, color-mix(in oklch, var(--secondary) 50%, transparent), transparent);
+    background: radial-gradient(circle at 3rem 50% in oklch,
+            color-mix(in oklch, var(--secondary) 50%, transparent),
+            transparent 75%);
     display: flex;
     gap: 2rem;
 }
