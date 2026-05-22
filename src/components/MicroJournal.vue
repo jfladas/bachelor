@@ -167,7 +167,7 @@ const handleListAreaClick = (event) => {
 
     const path = typeof event.composedPath === 'function' ? event.composedPath() : event.path || [];
     for (let node of path) {
-        if (node && node.classList && node.classList.contains && (node.classList.contains('entry-item') || node.classList.contains('empty-state'))) {
+        if (node && node.classList && node.classList.contains && (node.classList.contains('entry-item') || node.classList.contains('empty-state') || node.classList.contains('month-heading'))) {
             return;
         }
     }
@@ -334,7 +334,7 @@ const listAreaStyle = computed(() => {
 .list-area {
     position: fixed;
     z-index: 20;
-    width: 30rem;
+    width: 30.5rem;
     top: 0;
     padding: 0 1.8rem;
     border-radius: 2rem;
