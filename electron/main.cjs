@@ -625,7 +625,7 @@ app.whenReady().then(async () => {
         tray.setToolTip("Amorphous Blob");
         const trayMenuTemplate = [
             {
-                label: "Show",
+                label: "Wake Blob",
                 click: () => {
                     if (!mainWindow) {
                         return;
@@ -633,16 +633,7 @@ app.whenReady().then(async () => {
 
                     mainWindow.show();
                     mainWindow.setAlwaysOnTop(true, "screen-saver");
-                },
-            },
-            {
-                label: "Hide",
-                click: () => {
-                    if (!mainWindow) {
-                        return;
-                    }
-
-                    mainWindow.hide();
+                    mainWindow.webContents.send("tray:wake-blob");
                 },
             },
         ];
@@ -655,6 +646,12 @@ app.whenReady().then(async () => {
                     const didResetJournal = resetJournalState();
                     if (!didReset || !didResetJournal || !mainWindow) {
                         return;
+                    }
+
+                    try {
+                        await mainWindow.webContents.executeJavaScript("window.localStorage.clear();");
+                    } catch (error) {
+                        console.error("Failed to clear localStorage:", error);
                     }
 
                     mainWindow.setIgnoreMouseEvents(false, { forward: true });

@@ -41,6 +41,15 @@ const setState = (next) => {
     state.value = next;
 };
 
+const sleepFor = (durationMs) => {
+    setState(STATES.SLEEPING);
+    return Math.max(0, Number(durationMs) || 0);
+};
+
+const wakeUp = () => {
+    setState(STATES.IDLE);
+};
+
 const getState = () => state.value;
 
-export const useBlobState = () => ({ state, previous, setState, getState });
+export const useBlobState = () => ({ state, previous, setState, getState, sleepFor, wakeUp });

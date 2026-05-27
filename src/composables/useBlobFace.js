@@ -135,6 +135,8 @@ const shiftPathsY = (paths, deltaY) => {
     });
 };
 
+const CLOSED_EYES = extractPathsFromSvg(eyesClosedRaw, VIEWBOX);
+
 const FACE_PRESETS = {
     default: {
         eyes: extractPathsFromSvg(eyesDefaultRaw, VIEWBOX),
@@ -164,9 +166,11 @@ const FACE_PRESETS = {
         eyes: extractPathsFromSvg(eyesSurprisedRaw, VIEWBOX),
         mouth: extractPathsFromSvg(mouthSurprisedRaw, VIEWBOX),
     },
+    sleeping: {
+        eyes: CLOSED_EYES,
+        mouth: extractPathsFromSvg(mouthSurprisedRaw, VIEWBOX),
+    },
 };
-
-const CLOSED_EYES = extractPathsFromSvg(eyesClosedRaw, VIEWBOX);
 
 const EMOTION_FACE_PRESETS = {
     excited: "happy",

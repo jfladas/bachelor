@@ -4,6 +4,7 @@ import BlobVisuals from "./BlobVisuals.vue";
 import RadialMenu from "./RadialMenu.vue";
 import MicroJournal from "./MicroJournal.vue";
 import PasswordSetup from "./PasswordSetup.vue";
+import SleepSetup from "./SleepSetup.vue";
 import { useBlobPhysics } from "../composables/useBlobPhysics";
 import { STATES } from "../composables/useBlobState";
 import { useBlobFace } from "../composables/useBlobFace";
@@ -33,6 +34,11 @@ const BASE_BALL_RADIUS = 20;
 const MAX_RADIUS_VARIATION = 3;
 const MIN_BALL_RADIUS = 15;
 const EDGE_WIDTH = 20;
+const SLEEP_STORAGE_KEY = "amorphous-blob:sleep-state";
+const SLEEP_SETUP_DRAFT_KEY = "amorphous-blob:sleep-setup-draft";
+const SLEEP_SETUP_PREFERENCE_KEY = "amorphous-blob:sleep-setup-preference";
+const SLEEP_TAG_MIN_RATIO = 0.02;
+const SLEEP_TAG_MAX_RATIO = 0.98;
 
 const hue = computed(() => {
     return clampHue(props.onboardingData?.hue, 220);
@@ -54,6 +60,19 @@ const ballRadii = computed(() => {
 });
 
 const hueVariables = computed(() => createHueVariables(hue.value));
+
+const sleepShift = computed(() => {
+    if (blobState.state.value !== STATES.SLEEPING) {
+        return "0px";
+    }
+
+    return sleepVisualSide.value === "left" ? "-100vw" : "100vw";
+});
+
+const shellStyle = computed(() => ({
+    ...hueVariables.value,
+    "--sleep-shift": sleepShift.value,
+}));
 
 const {
     positions,
@@ -118,13 +137,162 @@ const journalEmotionVisible = ref(true);
 const journalTextVisible = ref(true);
 const secMenuOpen = ref(false);
 const showPasswordModal = ref(false);
+const showSleepModal = ref(false);
+const sleepTimerId = ref(null);
+const sleepEmotionRestoreTimerId = ref(null);
+const sleepDockSide = ref("right");
+const sleepVisualSide = ref("right");
+const sleepDockRatio = ref(0.9);
+const wakeButtonRef = ref(null);
+const sleepDeleteZoneRef = ref(null);
+const sleepTagPointerDown = ref(false);
+const sleepTagDragging = ref(false);
+const sleepTagDragStart = ref(null);
+const sleepTagSuppressClick = ref(false);
+const sleepDeleteZoneActive = ref(false);
+const sleepTagHidden = ref(false);
+const sleepTagMounted = ref(false);
+const isIgnoringMouseEvents = ref(false);
 const pendingEntryOptions = ref(null);
+const sleepSetupDraft = ref({ amount: 1, unit: "hours", rememberAsDefault: false });
 const _passwordSetupResolve = { ref: null };
 const _passwordSetupReject = { ref: null };
+let removeTrayWakeListener = null;
+let sleepTagShowTimerId = null;
 
 onMounted(async () => {
     await journal.loadEntries();
 });
+
+const readStoredSleepSetupDraft = () => {
+    try {
+        const raw = window.localStorage.getItem(SLEEP_SETUP_DRAFT_KEY);
+        if (!raw) {
+            return null;
+        }
+
+        const parsed = JSON.parse(raw);
+        const amount = Number(parsed?.amount);
+        const unit = parsed?.unit === "minutes" || parsed?.unit === "until-woken-up" ? parsed.unit : "hours";
+        const rememberAsDefault = parsed?.rememberAsDefault === true;
+
+        if (!Number.isFinite(amount) || amount < 1) {
+            return null;
+        }
+
+        return {
+            amount: Math.min(999, Math.round(amount)),
+            unit,
+            rememberAsDefault,
+        };
+    } catch {
+        return null;
+    }
+};
+
+const writeStoredSleepSetupDraft = (draft) => {
+    try {
+        window.localStorage.setItem(
+            SLEEP_SETUP_DRAFT_KEY,
+            JSON.stringify({
+                amount: Math.min(999, Math.max(1, Math.round(Number(draft?.amount) || 1))),
+                unit: draft?.unit === "minutes" || draft?.unit === "until-woken-up" ? draft.unit : "hours",
+                rememberAsDefault: draft?.rememberAsDefault === true,
+                savedAt: Date.now(),
+            })
+        );
+    } catch {
+        // Ignore storage failures and keep the in-memory draft.
+    }
+};
+
+const syncSleepSetupDraft = (draft) => {
+    const amount = Math.min(999, Math.max(1, Math.round(Number(draft?.amount) || 1)));
+    const unit = draft?.unit === "minutes" || draft?.unit === "until-woken-up" ? draft.unit : "hours";
+    const rememberAsDefault = draft?.rememberAsDefault === true;
+
+    sleepSetupDraft.value = { amount, unit, rememberAsDefault };
+    writeStoredSleepSetupDraft(sleepSetupDraft.value);
+};
+
+const readStoredSleepSetupPreference = () => {
+    try {
+        const raw = window.localStorage.getItem(SLEEP_SETUP_PREFERENCE_KEY);
+        if (!raw) {
+            return null;
+        }
+
+        const parsed = JSON.parse(raw);
+        if (!parsed || parsed.enabled !== true) {
+            return null;
+        }
+
+        const amount = Number(parsed.amount);
+        if (!Number.isFinite(amount) || amount < 1) {
+            return null;
+        }
+
+        return {
+            enabled: true,
+            amount: Math.min(999, Math.round(amount)),
+            unit: parsed.unit === "minutes" || parsed.unit === "until-woken-up" ? parsed.unit : "hours",
+        };
+    } catch {
+        return null;
+    }
+};
+
+const writeStoredSleepSetupPreference = (draft) => {
+    try {
+        window.localStorage.setItem(
+            SLEEP_SETUP_PREFERENCE_KEY,
+            JSON.stringify({
+                enabled: draft?.rememberAsDefault === true,
+                amount: Math.min(999, Math.max(1, Math.round(Number(draft?.amount) || 1))),
+                unit: draft?.unit === "minutes" || draft?.unit === "until-woken-up" ? draft.unit : "hours",
+                savedAt: Date.now(),
+            })
+        );
+    } catch {
+        // Ignore storage failures and keep the in-memory preference.
+    }
+};
+
+const clearStoredSleepSetupPreference = () => {
+    try {
+        window.localStorage.removeItem(SLEEP_SETUP_PREFERENCE_KEY);
+    } catch {
+        // Ignore storage failures.
+    }
+};
+
+const syncSleepSetupPreference = (draft) => {
+    const amount = Math.min(999, Math.max(1, Math.round(Number(draft?.amount) || 1)));
+    const unit = draft?.unit === "minutes" || draft?.unit === "until-woken-up" ? draft.unit : "hours";
+    const rememberAsDefault = draft?.rememberAsDefault === true;
+
+    sleepSetupDraft.value = { amount, unit, rememberAsDefault };
+    writeStoredSleepSetupDraft(sleepSetupDraft.value);
+    writeStoredSleepSetupPreference(sleepSetupDraft.value);
+};
+
+const hydrateSleepSetupDraft = () => {
+    const storedDraft = readStoredSleepSetupDraft();
+    if (storedDraft) {
+        sleepSetupDraft.value = storedDraft;
+    }
+
+    const storedPreference = readStoredSleepSetupPreference();
+    if (storedPreference) {
+        sleepSetupDraft.value = {
+            amount: storedPreference.amount,
+            unit: storedPreference.unit,
+            rememberAsDefault: true,
+        };
+    }
+};
+
+hydrateSleepSetupDraft();
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
@@ -275,6 +443,374 @@ const closeMenu = ({ clearDraft = false } = {}) => {
     }
 };
 
+const clearSleepTimer = () => {
+    if (sleepTimerId.value) {
+        window.clearTimeout(sleepTimerId.value);
+        sleepTimerId.value = null;
+    }
+};
+
+const clearSleepEmotionRestoreTimer = () => {
+    if (sleepEmotionRestoreTimerId.value) {
+        window.clearTimeout(sleepEmotionRestoreTimerId.value);
+        sleepEmotionRestoreTimerId.value = null;
+    }
+};
+
+const restoreFaceEmotionAfterSleep = () => {
+    clearSleepEmotionRestoreTimer();
+    sleepEmotionRestoreTimerId.value = window.setTimeout(() => {
+        sleepEmotionRestoreTimerId.value = null;
+        applyFaceEmotion(selectedEmotion.value || latestSubmittedEmotion.value || DEFAULT_FACE_EMOTION);
+    }, 3000);
+};
+
+const readStoredSleepState = () => {
+    try {
+        const raw = window.localStorage.getItem(SLEEP_STORAGE_KEY);
+        if (!raw) {
+            return null;
+        }
+
+        const parsed = JSON.parse(raw);
+        const indefinite = parsed?.indefinite === true;
+
+        if (!indefinite && !Number.isFinite(parsed?.wakeAt)) {
+            return null;
+        }
+
+        return {
+            wakeAt: indefinite ? null : Math.max(0, Math.round(parsed.wakeAt)),
+            indefinite,
+            dockSide: parsed.dockSide === "left" ? "left" : "right",
+            dockRatio: Number.isFinite(parsed.dockRatio)
+                ? Math.min(SLEEP_TAG_MAX_RATIO, Math.max(SLEEP_TAG_MIN_RATIO, parsed.dockRatio))
+                : 0.5,
+            showWakeTag: parsed.showWakeTag !== false,
+        };
+    } catch {
+        return null;
+    }
+};
+
+const writeStoredSleepState = (wakeAt, dockSide, dockRatio = 0.5, indefinite = false) => {
+    try {
+        window.localStorage.setItem(
+            SLEEP_STORAGE_KEY,
+            JSON.stringify({
+                wakeAt: indefinite ? null : Math.max(0, Math.round(wakeAt)),
+                indefinite: Boolean(indefinite),
+                dockSide: dockSide === "left" ? "left" : "right",
+                dockRatio: Math.min(SLEEP_TAG_MAX_RATIO, Math.max(SLEEP_TAG_MIN_RATIO, dockRatio)),
+                showWakeTag: !sleepTagHidden.value,
+                savedAt: Date.now(),
+            })
+        );
+    } catch {
+        // Ignore storage failures and fall back to the in-memory timer.
+    }
+};
+
+const clearStoredSleepState = () => {
+    try {
+        window.localStorage.removeItem(SLEEP_STORAGE_KEY);
+    } catch {
+        // Ignore storage failures.
+    }
+};
+
+const setIgnoreMouseEvents = (ignore) => {
+    const nextIgnore = Boolean(ignore);
+    if (isIgnoringMouseEvents.value === nextIgnore) {
+        return;
+    }
+
+    isIgnoringMouseEvents.value = nextIgnore;
+    ipcRenderer?.send?.("set-ignore-mouse-events", nextIgnore);
+};
+
+const sleepTagStyle = computed(() => ({
+    top: `${Math.round(Math.min(SLEEP_TAG_MAX_RATIO, Math.max(SLEEP_TAG_MIN_RATIO, sleepDockRatio.value)) * 100)}%`,
+}));
+
+const clearSleepTagAnimationTimers = () => {
+    if (sleepTagShowTimerId) {
+        window.clearTimeout(sleepTagShowTimerId);
+        sleepTagShowTimerId = null;
+    }
+};
+
+const showWakeTagWithDelay = (delayMs) => {
+    if (sleepTagHidden.value) {
+        clearSleepTagAnimationTimers();
+        sleepTagMounted.value = false;
+        return;
+    }
+
+    clearSleepTagAnimationTimers();
+
+    if (!Number.isFinite(delayMs) || delayMs <= 0) {
+        sleepTagMounted.value = true;
+        return;
+    }
+
+    sleepTagShowTimerId = window.setTimeout(() => {
+        sleepTagShowTimerId = null;
+        if (sleepTagHidden.value) {
+            sleepTagMounted.value = false;
+            return;
+        }
+        sleepTagMounted.value = true;
+    }, Math.max(0, Number(delayMs) || 0));
+};
+
+const updateSleepDockPosition = (clientX, clientY) => {
+    const { width, height } = getViewportBounds();
+    sleepDockSide.value = clientX < width / 2 ? "left" : "right";
+    sleepDockRatio.value = Math.min(SLEEP_TAG_MAX_RATIO, Math.max(SLEEP_TAG_MIN_RATIO, clientY / Math.max(1, height)));
+};
+
+const isPointInDeleteZone = (clientX, clientY) => {
+    const rect = sleepDeleteZoneRef.value?.getBoundingClientRect?.();
+    if (!rect) {
+        return false;
+    }
+
+    return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+};
+
+const handleWakeButtonPointerDown = (event) => {
+    if (event.button !== 0 || blobState.state.value !== STATES.SLEEPING) {
+        return;
+    }
+
+    sleepTagPointerDown.value = true;
+    sleepTagDragging.value = false;
+    sleepTagDragStart.value = { x: event.clientX, y: event.clientY };
+    sleepTagSuppressClick.value = false;
+    sleepDeleteZoneActive.value = false;
+    setIgnoreMouseEvents(false);
+};
+
+const handleWakeButtonClick = (event) => {
+    if (sleepTagSuppressClick.value) {
+        event.preventDefault();
+        event.stopPropagation();
+        sleepTagSuppressClick.value = false;
+        return;
+    }
+
+    wakeFromSleep();
+};
+
+const finishSleepTagDrag = (clientX, clientY) => {
+    if (!sleepTagPointerDown.value) {
+        return;
+    }
+
+    const dragStart = sleepTagDragStart.value;
+    const draggedDistance = dragStart ? Math.hypot(clientX - dragStart.x, clientY - dragStart.y) : 0;
+
+    sleepTagPointerDown.value = false;
+    sleepTagDragging.value = false;
+    sleepTagDragStart.value = null;
+    sleepTagSuppressClick.value = draggedDistance > 6;
+
+    if (isPointInDeleteZone(clientX, clientY)) {
+        sleepDeleteZoneActive.value = false;
+        sleepTagHidden.value = true;
+        sleepTagMounted.value = false;
+        const storedSleepState = readStoredSleepState();
+        if (storedSleepState) {
+            writeStoredSleepState(storedSleepState.wakeAt, sleepDockSide.value, sleepDockRatio.value);
+        }
+        setIgnoreMouseEvents(true);
+        return;
+    }
+
+    updateSleepDockPosition(clientX, clientY);
+    sleepVisualSide.value = sleepDockSide.value;
+    const storedSleepState = readStoredSleepState();
+    if (storedSleepState) {
+        writeStoredSleepState(storedSleepState.wakeAt, sleepDockSide.value, sleepDockRatio.value);
+    }
+    sleepDeleteZoneActive.value = false;
+    syncSleepClickthrough(clientX, clientY);
+};
+
+const performWakeFromSleep = () => {
+    clearSleepTimer();
+    clearStoredSleepState();
+    sleepVisualSide.value = "right";
+    sleepTagPointerDown.value = false;
+    sleepTagDragging.value = false;
+    sleepTagDragStart.value = null;
+    sleepTagSuppressClick.value = false;
+    sleepDeleteZoneActive.value = false;
+    sleepTagHidden.value = false;
+    sleepTagMounted.value = false;
+    blobState.wakeUp();
+    setIgnoreMouseEvents(false);
+    setInteractionLocked(menuOpen.value || journalOpen.value || secMenuOpen.value);
+};
+
+const onSleepTagAfterLeave = () => {
+    if (blobState.state.value === STATES.SLEEPING && !sleepTagHidden.value) {
+        performWakeFromSleep();
+    }
+};
+
+const syncSleepClickthrough = (mouseX = null, mouseY = null) => {
+    if (blobState.state.value !== STATES.SLEEPING || sleepTagDragging.value) {
+        return;
+    }
+
+    const wakeButton = wakeButtonRef.value;
+    if (!wakeButton) {
+        setIgnoreMouseEvents(true);
+        return;
+    }
+
+    if (!Number.isFinite(mouseX) || !Number.isFinite(mouseY)) {
+        setIgnoreMouseEvents(true);
+        return;
+    }
+
+    const rect = wakeButton.getBoundingClientRect();
+    const isOverWakeButton = mouseX >= rect.left && mouseX <= rect.right && mouseY >= rect.top && mouseY <= rect.bottom;
+    setIgnoreMouseEvents(!isOverWakeButton);
+};
+
+const resolveSleepSide = () => {
+    const { width } = getViewportBounds();
+
+    if (!blobCenter.value) {
+        return "right";
+    }
+
+    return blobCenter.value.x < width / 2 ? "left" : "right";
+};
+
+const syncSleepState = () => {
+    const storedSleepState = readStoredSleepState();
+
+    if (!storedSleepState) {
+        if (blobState.state.value === STATES.SLEEPING) {
+            wakeFromSleep();
+        }
+        return;
+    }
+
+    const remainingMs = storedSleepState.indefinite ? null : storedSleepState.wakeAt - Date.now();
+    if (storedSleepState.indefinite) {
+        sleepDockSide.value = storedSleepState.dockSide;
+        sleepVisualSide.value = storedSleepState.dockSide;
+        sleepDockRatio.value = storedSleepState.dockRatio ?? 0.9;
+        sleepTagHidden.value = storedSleepState.showWakeTag === false;
+        if (sleepTagHidden.value) {
+            sleepTagMounted.value = false;
+        } else if (!sleepTagMounted.value) {
+            showWakeTagWithDelay(0);
+        }
+
+        if (blobState.state.value !== STATES.SLEEPING) {
+            blobState.sleepFor(0);
+            clearSleepEmotionRestoreTimer();
+            applyFaceEmotion("sleeping");
+        }
+
+        clearSleepTimer();
+        setIgnoreMouseEvents(true);
+        return;
+    }
+
+    if (remainingMs <= 0) {
+        clearStoredSleepState();
+        if (blobState.state.value === STATES.SLEEPING) {
+            wakeFromSleep();
+        } else {
+            setIgnoreMouseEvents(false);
+        }
+        return;
+    }
+
+    sleepDockSide.value = storedSleepState.dockSide;
+    sleepVisualSide.value = storedSleepState.dockSide;
+    sleepDockRatio.value = storedSleepState.dockRatio ?? 0.9;
+    sleepTagHidden.value = storedSleepState.showWakeTag === false;
+    if (sleepTagHidden.value) {
+        sleepTagMounted.value = false;
+    } else if (!sleepTagMounted.value) {
+        showWakeTagWithDelay(0);
+    }
+    if (blobState.state.value !== STATES.SLEEPING) {
+        blobState.sleepFor(remainingMs);
+        clearSleepEmotionRestoreTimer();
+        applyFaceEmotion("sleeping");
+    }
+
+    clearSleepTimer();
+    sleepTimerId.value = window.setTimeout(() => {
+        wakeFromSleep();
+    }, remainingMs);
+    setIgnoreMouseEvents(true);
+};
+
+const wakeFromSleep = ({ animateTag = true } = {}) => {
+    if (animateTag && !sleepTagHidden.value && sleepTagMounted.value) {
+        sleepTagMounted.value = false;
+        return;
+    }
+
+    performWakeFromSleep();
+};
+
+const handleSleepSetupConfirm = (payload) => {
+    const normalizedPayload = typeof payload === "number" ? { durationMs: payload } : payload || {};
+    const durationMs = Number(normalizedPayload.durationMs);
+    const untilWokenUp = normalizedPayload.unit === "until-woken-up";
+    const shouldRemember = sleepSetupDraft.value.rememberAsDefault === true;
+    showSleepModal.value = false;
+    closeMenu();
+
+    if (shouldRemember) {
+        syncSleepSetupPreference(sleepSetupDraft.value);
+    } else {
+        clearStoredSleepSetupPreference();
+    }
+
+    clearSleepTimer();
+    sleepDockSide.value = resolveSleepSide();
+    sleepVisualSide.value = sleepDockSide.value;
+    sleepDockRatio.value = 0.9;
+    sleepTagHidden.value = false;
+    sleepTagMounted.value = false;
+    showWakeTagWithDelay(3000);
+    if (untilWokenUp) {
+        writeStoredSleepState(null, sleepDockSide.value, sleepDockRatio.value, true);
+        blobState.sleepFor(0);
+        setIgnoreMouseEvents(true);
+        clearSleepEmotionRestoreTimer();
+        applyFaceEmotion("sleeping");
+        return;
+    }
+
+    const wakeAt = Date.now() + Math.max(0, Number(durationMs) || 0);
+    writeStoredSleepState(wakeAt, sleepDockSide.value, sleepDockRatio.value);
+    blobState.sleepFor(durationMs);
+    setIgnoreMouseEvents(true);
+    clearSleepEmotionRestoreTimer();
+    applyFaceEmotion("sleeping");
+
+    sleepTimerId.value = window.setTimeout(() => {
+        wakeFromSleep();
+    }, Math.max(0, wakeAt - Date.now()));
+};
+
+const handleSleepSetupCancel = () => {
+    showSleepModal.value = false;
+};
+
 const openMenu = () => {
     if (didDragRecently()) {
         return;
@@ -316,9 +852,25 @@ const openSecMenu = () => {
 };
 
 const sendToSleep = () => {
+    const storedPreference = readStoredSleepSetupPreference();
+    if (storedPreference) {
+        syncSleepSetupPreference({
+            amount: storedPreference.amount,
+            unit: storedPreference.unit,
+            rememberAsDefault: true,
+        });
+        handleSleepSetupConfirm({
+            durationMs: storedPreference.unit === "until-woken-up"
+                ? null
+                : Math.max(60 * 1000, storedPreference.amount * (storedPreference.unit === "minutes" ? 60 * 1000 : 60 * 60 * 1000)),
+            unit: storedPreference.unit,
+            amount: storedPreference.amount,
+        });
+        return;
+    }
+
     closeMenu();
-    ipcRenderer?.send?.("hide-app");
-    window.alert("Work in progress");
+    showSleepModal.value = true;
 };
 
 const openSettings = () => {
@@ -419,15 +971,80 @@ watch(blobState.state, (next) => {
         startEyeFollow(getCursorOffset);
         return;
     }
+
+    if (next === STATES.SLEEPING) {
+        stopEyeFollow();
+        clearSleepEmotionRestoreTimer();
+        applyFaceEmotion("sleeping");
+        return;
+    }
+
+    if (blobState.previous.value === STATES.SLEEPING && next === STATES.IDLE) {
+        restoreFaceEmotionAfterSleep();
+    }
+
     stopEyeFollow();
 });
 
 onMounted(() => {
     const onMove = (e) => {
         mousePos.value = { x: e.clientX, y: e.clientY };
+
+        if (sleepTagPointerDown.value && sleepTagDragStart.value) {
+            const movedDistance = Math.hypot(e.clientX - sleepTagDragStart.value.x, e.clientY - sleepTagDragStart.value.y);
+            if (movedDistance > 6 && !sleepTagDragging.value) {
+                sleepTagDragging.value = true;
+                sleepTagSuppressClick.value = true;
+                sleepVisualSide.value = sleepDockSide.value;
+            }
+        }
+
+        if (sleepTagDragging.value) {
+            updateSleepDockPosition(e.clientX, e.clientY);
+            sleepDeleteZoneActive.value = isPointInDeleteZone(e.clientX, e.clientY);
+            setIgnoreMouseEvents(false);
+            return;
+        }
+
+        if (blobState.state.value === STATES.SLEEPING) {
+            syncSleepClickthrough(e.clientX, e.clientY);
+        }
+    };
+    const onUp = (e) => {
+        if (sleepTagPointerDown.value) {
+            finishSleepTagDrag(e.clientX, e.clientY);
+        }
     };
     window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
     onBeforeUnmount(() => window.removeEventListener("mousemove", onMove));
+    onBeforeUnmount(() => window.removeEventListener("mouseup", onUp));
+});
+
+onMounted(() => {
+    const onResume = () => syncSleepState();
+
+    window.addEventListener("focus", onResume);
+    window.addEventListener("pageshow", onResume);
+    document.addEventListener("visibilitychange", onResume);
+    syncSleepState();
+
+    onBeforeUnmount(() => {
+        window.removeEventListener("focus", onResume);
+        window.removeEventListener("pageshow", onResume);
+        document.removeEventListener("visibilitychange", onResume);
+    });
+});
+
+onMounted(() => {
+    const onTrayWake = () => {
+        if (blobState.state.value === STATES.SLEEPING) {
+            wakeFromSleep();
+        }
+    };
+
+    ipcRenderer?.on?.("tray:wake-blob", onTrayWake);
+    removeTrayWakeListener = () => ipcRenderer?.removeListener?.("tray:wake-blob", onTrayWake);
 });
 
 watch(grabbing, (isGrabbing) => {
@@ -447,27 +1064,68 @@ watch(journalOpen, (isOpen) => {
 });
 
 watch(
-    () => menuOpen.value || journalOpen.value || secMenuOpen.value,
+    () => menuOpen.value || journalOpen.value || secMenuOpen.value || showPasswordModal.value || showSleepModal.value,
     (isInteractive) => {
         setInteractionLocked(isInteractive);
     },
     { immediate: true }
 );
 
+watch(
+    () => blobState.state.value,
+    (next) => {
+        if (next === STATES.SLEEPING) {
+            syncSleepClickthrough(mousePos.value.x, mousePos.value.y);
+            return;
+        }
+
+        sleepTagPointerDown.value = false;
+        sleepTagDragging.value = false;
+        sleepTagDragStart.value = null;
+        sleepTagSuppressClick.value = false;
+        sleepDeleteZoneActive.value = false;
+        sleepTagMounted.value = false;
+        setIgnoreMouseEvents(false);
+    }
+);
+
 onBeforeUnmount(() => {
+    removeTrayWakeListener?.();
+    removeTrayWakeListener = null;
+    clearSleepTagAnimationTimers();
+    clearSleepTimer();
+    clearSleepEmotionRestoreTimer();
+    clearStoredSleepState();
+    setIgnoreMouseEvents(false);
     setInteractionLocked(false);
     blobState.setState(false);
 });
 </script>
 
 <template>
-    <div class="shell" :style="hueVariables">
+    <div class="shell" :style="shellStyle">
         <BlobVisuals :hue-variables="hueVariables" :blob-path="blobPath" :edge-width="EDGE_WIDTH" :grabbing="grabbing"
             :face-style="faceStyle" :face-parts="faceParts"
             :face-eyes-style="{ transform: `translateY(-175%) translate(${eyesOffset.x}px, ${eyesOffset.y}px)`, transition: 'transform 0.3s ease' }"
             :outline-points="outlinePoints" :positions="positions" :blob-area-ref="setBlobAreaRef"
             :blob-edge-ref="setBlobEdgeRef" :emotion="visualEmotion" :is-active="menuOpen || journalOpen || secMenuOpen"
             @start-drag="startDrag" @open-menu="openMenu" @open-sec-menu="openSecMenu" :state="blobState.state.value" />
+
+        <Transition name="sleep-tag" @after-leave="onSleepTagAfterLeave">
+            <button v-if="blobState.state.value === STATES.SLEEPING && !sleepTagHidden && sleepTagMounted"
+                ref="wakeButtonRef" class="sleep-tag" :class="sleepDockSide" :style="sleepTagStyle"
+                aria-label="Wake Blob" @mousedown.prevent="handleWakeButtonPointerDown" @click="handleWakeButtonClick">
+            </button>
+        </Transition>
+
+        <div v-if="blobState.state.value === STATES.SLEEPING && sleepTagDragging" ref="sleepDeleteZoneRef"
+            class="sleep-delete-zone" :class="[sleepDockSide, { active: sleepDeleteZoneActive }]">
+            Remove
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-4">
+                <path
+                    d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
+            </svg>
+        </div>
 
         <button v-if="menuOpen || journalOpen || secMenuOpen" class="menu-backdrop" aria-label="Close menu"
             @click="closeMenu" tabindex="-1" />
@@ -492,12 +1150,18 @@ onBeforeUnmount(() => {
             <PasswordSetup v-if="showPasswordModal" @password-set="handlePasswordSetupComplete"
                 @password-unlocked="handlePasswordSetupComplete" @cancel="handlePasswordSetupCancel" />
         </Transition>
+
+        <Transition name="overlay-fade" appear>
+            <SleepSetup v-if="showSleepModal" :initial-amount="sleepSetupDraft.amount"
+                :initial-unit="sleepSetupDraft.unit" @confirm="handleSleepSetupConfirm" @cancel="handleSleepSetupCancel"
+                @draft-change="syncSleepSetupDraft" />
+        </Transition>
     </div>
 </template>
 
 <style scoped>
 .shell {
-
+    overflow: visible;
     position: fixed;
     inset: 0;
 }
@@ -517,14 +1181,112 @@ onBeforeUnmount(() => {
     pointer-events: all;
 }
 
+.sleep-tag {
+    --sleep-tag-slide-x: 0%;
+    position: fixed;
+    z-index: 14;
+    border: 0;
+    padding: 1rem 0.75rem;
+    background: var(--primary);
+    color: var(--text-strong);
+    font-size: 0.9rem;
+    font-weight: 700;
+    box-shadow: 0 0 0.5rem var(--shadow);
+    transform: translateY(-50%);
+    cursor: pointer;
+    pointer-events: auto;
+    transition: padding 0.2s ease, background 0.2s ease;
+    touch-action: none;
+    user-select: none;
+}
+
+.sleep-tag:hover {
+    background: var(--lighter);
+    padding: 1rem;
+}
+
+.sleep-tag.left {
+    --sleep-tag-slide-x: -105%;
+    left: 0;
+    border-radius: 0 1rem 1rem 0;
+}
+
+.sleep-tag.right {
+    --sleep-tag-slide-x: 105%;
+    right: 0;
+    border-radius: 1rem 0 0 1rem;
+}
+
+.sleep-tag:focus-visible {
+    outline: 3px solid var(--lighter);
+    outline-offset: 2px;
+}
+
+.sleep-tag-enter-active,
+.sleep-tag-leave-active {
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.sleep-tag-enter-from,
+.sleep-tag-leave-to {
+    opacity: 0;
+    transform: translateY(-50%) translateX(var(--sleep-tag-slide-x));
+}
+
+.sleep-tag-enter-to,
+.sleep-tag-leave-from {
+    opacity: 1;
+    transform: translateY(-50%);
+}
+
+.sleep-delete-zone {
+    position: fixed;
+    width: 6rem;
+    top: 0;
+    transform: none;
+    z-index: 13;
+    padding: 1rem;
+    color: var(--text-strong);
+    font-weight: 600;
+    background: var(--lighter);
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+}
+
+.sleep-delete-zone svg {
+    margin: 0 0.5rem;
+    flex-shrink: 0;
+    width: 1.2rem;
+    height: 1.2rem;
+}
+
+.sleep-delete-zone.left {
+    border-radius: 0 0 1.5rem 0;
+    text-align: right;
+    left: 0;
+    flex-direction: row-reverse;
+}
+
+.sleep-delete-zone.right {
+    border-radius: 0 0 0 1.5rem;
+    text-align: left;
+    right: 0;
+    flex-direction: row;
+}
+
+.sleep-delete-zone.active {
+    background: var(--white);
+    box-shadow: 0 0 1rem var(--primary);
+}
+
 .overlay-fade-enter-active,
 .overlay-fade-leave-active {
-    transition: opacity 0.25s ease, transform 0.25s ease;
+    transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .overlay-fade-enter-from,
 .overlay-fade-leave-to {
     opacity: 0;
-    transform: scale(0.98);
 }
 </style>

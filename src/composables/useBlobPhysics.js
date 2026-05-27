@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useBlobState, STATES } from "./useBlobState";
 import { Engine, Runner, World, Bodies, Body, Constraint } from "matter-js";
 
@@ -15,6 +15,8 @@ const CENTER_LERP_MAX = 0.7;
 const BASE_NUDGE_INTERVAL_MS = 1500;
 const BASE_NUDGE_VELOCITY = 0.5;
 const IDLE_NUDGE_BLEND = 0.8;
+const SLEEP_UPDATE_INTERVAL_MS = 33;
+const SLEEP_TIME_SCALE = 0.2;
 const POSITION_STORAGE_KEY = "amorphous-blob:blob-center";
 const PERSIST_INTERVAL_MS = 500;
 
@@ -30,6 +32,7 @@ export const useBlobPhysics = ({ ballRadii, activity, ipcRenderer }) => {
     const blobState = useBlobState();
     const smoothBlobCenter = ref(null);
     const state = blobState.state;
+    let isSleeping = false;
 
     let engine;
     let runner;
@@ -48,6 +51,7 @@ export const useBlobPhysics = ({ ballRadii, activity, ipcRenderer }) => {
     let nextIdleNudgeAt = 0;
     let lastDragMoveAt = 0;
     let interactionLocked = false;
+    let lastSleepUpdateAt = 0;
 
     const setBlobAreaRef = (element) => {
         blobArea.value = element;
@@ -581,7 +585,7 @@ export const useBlobPhysics = ({ ballRadii, activity, ipcRenderer }) => {
 
     const updateState = (now = Date.now()) => {
         const prev = blobState.getState();
-        if (prev === STATES.ACTIVE) {
+        if (prev === STATES.ACTIVE || prev === STATES.SLEEPING) {
             return;
         }
 
@@ -746,6 +750,10 @@ export const useBlobPhysics = ({ ballRadii, activity, ipcRenderer }) => {
     };
 
     const onMouseMove = (event) => {
+        if (blobState.getState() === STATES.SLEEPING) {
+            return;
+        }
+
         mousePosition = { x: event.clientX, y: event.clientY };
         updateHoverState();
 
@@ -810,6 +818,17 @@ export const useBlobPhysics = ({ ballRadii, activity, ipcRenderer }) => {
 
     const animate = () => {
         const now = Date.now();
+        const sleeping = blobState.getState() === STATES.SLEEPING;
+
+        if (sleeping && now - lastSleepUpdateAt < SLEEP_UPDATE_INTERVAL_MS) {
+            animationFrameId = window.requestAnimationFrame(animate);
+            return;
+        }
+
+        if (sleeping) {
+            lastSleepUpdateAt = now;
+        }
+
         updateState(now);
         applyIdleMovement(now);
         updateHoverBallScale();
@@ -829,6 +848,29 @@ export const useBlobPhysics = ({ ballRadii, activity, ipcRenderer }) => {
         engine = Engine.create({
             gravity: { x: 0, y: 0.8 },
         });
+
+        watch(
+            state,
+            (next) => {
+                if (!engine) {
+                    return;
+                }
+
+                const sleeping = next === STATES.SLEEPING;
+                if (sleeping === isSleeping) {
+                    return;
+                }
+
+                isSleeping = sleeping;
+                engine.timing.timeScale = sleeping ? SLEEP_TIME_SCALE : 1;
+                lastSleepUpdateAt = 0;
+
+                if (!sleeping) {
+                    updateState();
+                }
+            },
+            { immediate: true }
+        );
 
         const { width, height } = getViewportBounds();
         lastViewportBounds = { width, height };

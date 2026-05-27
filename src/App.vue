@@ -115,7 +115,7 @@ const {
 
 .overlay-fade-enter-active,
 .overlay-fade-leave-active {
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .overlay-fade-enter-from,

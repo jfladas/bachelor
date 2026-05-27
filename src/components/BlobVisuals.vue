@@ -220,12 +220,17 @@ function handlePointerDown(event) {
 
 <style scoped>
 .root {
+    overflow: visible;
     position: fixed;
     inset: 0;
+    opacity: 1;
     pointer-events: none;
+    transform: translateX(var(--sleep-shift, 0px));
+    transition: transform 6s cubic-bezier(0.22, 0, 0.36, 1), opacity 0.2s linear;
 }
 
 .blob-overlay {
+    overflow: visible;
     position: fixed;
     inset: 0;
     width: 100%;
@@ -322,5 +327,16 @@ function handlePointerDown(event) {
 
 .root.active .blob-area {
     filter: drop-shadow(0 0 1.5rem color-mix(in oklch, var(--primary) 70%, transparent));
+}
+
+.root.state-sleeping .blob-area,
+.root.state-sleeping .blob-edge {
+    cursor: default;
+    pointer-events: none;
+}
+
+.root.state-sleeping {
+    opacity: 0;
+    transition: transform 6s cubic-bezier(0.22, 0, 0.36, 1), opacity 0s linear 6s;
 }
 </style>
