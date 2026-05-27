@@ -5,6 +5,7 @@ import RadialMenu from "./RadialMenu.vue";
 import MicroJournal from "./MicroJournal.vue";
 import PasswordSetup from "./PasswordSetup.vue";
 import SleepSetup from "./SleepSetup.vue";
+import SettingsWindow from "./SettingsWindow.vue";
 import { useBlobPhysics } from "../composables/useBlobPhysics";
 import { STATES } from "../composables/useBlobState";
 import { useBlobFace } from "../composables/useBlobFace";
@@ -34,11 +35,14 @@ const BASE_BALL_RADIUS = 20;
 const MAX_RADIUS_VARIATION = 3;
 const MIN_BALL_RADIUS = 15;
 const EDGE_WIDTH = 20;
+const SETTINGS_STORAGE_KEY = "amorphous-blob:settings";
 const SLEEP_STORAGE_KEY = "amorphous-blob:sleep-state";
 const SLEEP_SETUP_DRAFT_KEY = "amorphous-blob:sleep-setup-draft";
 const SLEEP_SETUP_PREFERENCE_KEY = "amorphous-blob:sleep-setup-preference";
 const SLEEP_TAG_MIN_RATIO = 0.02;
 const SLEEP_TAG_MAX_RATIO = 0.98;
+
+const clampPercent = (value) => Math.min(150, Math.max(50, Math.round(Number(value) || 100)));
 
 const hue = computed(() => {
     return clampHue(props.onboardingData?.hue, 220);
@@ -74,6 +78,52 @@ const shellStyle = computed(() => ({
     "--sleep-shift": sleepShift.value,
 }));
 
+const createDefaultAppSettings = () => ({
+    blobSize: 100,
+    sleepTagVisible: true,
+    startOnSystemRestart: true,
+});
+
+const normalizeAppSettings = (settings = {}) => ({
+    blobSize: clampPercent(settings?.blobSize ?? settings?.blobScale ?? 100),
+    sleepTagVisible: settings?.sleepTagVisible !== false,
+    startOnSystemRestart: settings?.startOnSystemRestart !== false,
+});
+
+const readStoredAppSettings = () => {
+    try {
+        const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+        if (!raw) {
+            return null;
+        }
+
+        return normalizeAppSettings(JSON.parse(raw));
+    } catch {
+        return null;
+    }
+};
+
+const writeStoredAppSettings = (settings) => {
+    try {
+        window.localStorage.setItem(
+            SETTINGS_STORAGE_KEY,
+            JSON.stringify({
+                blobSize: clampPercent(settings?.blobSize),
+                sleepTagVisible: settings?.sleepTagVisible !== false,
+                startOnSystemRestart: settings?.startOnSystemRestart !== false,
+                savedAt: Date.now(),
+            })
+        );
+    } catch {
+        // Ignore storage failures and keep the in-memory settings.
+    }
+};
+
+const appSettings = ref(createDefaultAppSettings());
+const settingsLoaded = ref(false);
+const showSettingsModal = ref(false);
+const blobScale = computed(() => appSettings.value.blobSize / 100);
+
 const {
     positions,
     grabbing,
@@ -89,6 +139,7 @@ const {
     jump,
 } = useBlobPhysics({
     ballRadii,
+    blobScale,
     activity,
     ipcRenderer,
 });
@@ -164,6 +215,10 @@ onMounted(async () => {
     await journal.loadEntries();
 });
 
+onMounted(() => {
+    hydrateAppSettings();
+});
+
 const readStoredSleepSetupDraft = () => {
     try {
         const raw = window.localStorage.getItem(SLEEP_SETUP_DRAFT_KEY);
@@ -213,6 +268,12 @@ const syncSleepSetupDraft = (draft) => {
 
     sleepSetupDraft.value = { amount, unit, rememberAsDefault };
     writeStoredSleepSetupDraft(sleepSetupDraft.value);
+    if (rememberAsDefault) {
+        writeStoredSleepSetupPreference(sleepSetupDraft.value);
+        return;
+    }
+
+    clearStoredSleepSetupPreference();
 };
 
 const readStoredSleepSetupPreference = () => {
@@ -273,7 +334,12 @@ const syncSleepSetupPreference = (draft) => {
 
     sleepSetupDraft.value = { amount, unit, rememberAsDefault };
     writeStoredSleepSetupDraft(sleepSetupDraft.value);
-    writeStoredSleepSetupPreference(sleepSetupDraft.value);
+    if (rememberAsDefault) {
+        writeStoredSleepSetupPreference(sleepSetupDraft.value);
+        return;
+    }
+
+    clearStoredSleepSetupPreference();
 };
 
 const hydrateSleepSetupDraft = () => {
@@ -293,6 +359,40 @@ const hydrateSleepSetupDraft = () => {
 };
 
 hydrateSleepSetupDraft();
+
+const hydrateAppSettings = async () => {
+    const storedSettings = readStoredAppSettings();
+    if (storedSettings) {
+        appSettings.value = normalizeAppSettings(storedSettings);
+    }
+
+    try {
+        if (!ipcRenderer?.invoke) {
+            settingsLoaded.value = true;
+            return;
+        }
+
+        const startOnSystemRestart = await ipcRenderer.invoke("app:get-start-on-restart");
+        if (typeof startOnSystemRestart === "boolean") {
+            appSettings.value.startOnSystemRestart = startOnSystemRestart;
+            writeStoredAppSettings(appSettings.value);
+        }
+    } catch (error) {
+        if (!String(error?.message || error).includes("No handler registered")) {
+            console.error("Failed to read startup setting:", error);
+        }
+    } finally {
+        settingsLoaded.value = true;
+    }
+};
+
+const syncAppSettings = (nextSettings = {}) => {
+    appSettings.value = normalizeAppSettings({
+        ...appSettings.value,
+        ...nextSettings,
+    });
+    writeStoredAppSettings(appSettings.value);
+};
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
@@ -769,23 +869,18 @@ const handleSleepSetupConfirm = (payload) => {
     const normalizedPayload = typeof payload === "number" ? { durationMs: payload } : payload || {};
     const durationMs = Number(normalizedPayload.durationMs);
     const untilWokenUp = normalizedPayload.unit === "until-woken-up";
-    const shouldRemember = sleepSetupDraft.value.rememberAsDefault === true;
     showSleepModal.value = false;
     closeMenu();
 
-    if (shouldRemember) {
-        syncSleepSetupPreference(sleepSetupDraft.value);
-    } else {
-        clearStoredSleepSetupPreference();
-    }
+    syncSleepSetupDraft(sleepSetupDraft.value);
 
     clearSleepTimer();
     sleepDockSide.value = resolveSleepSide();
     sleepVisualSide.value = sleepDockSide.value;
     sleepDockRatio.value = 0.9;
-    sleepTagHidden.value = false;
+    sleepTagHidden.value = !appSettings.value.sleepTagVisible;
     sleepTagMounted.value = false;
-    showWakeTagWithDelay(3000);
+    showWakeTagWithDelay(appSettings.value.sleepTagVisible ? 3000 : 0);
     if (untilWokenUp) {
         writeStoredSleepState(null, sleepDockSide.value, sleepDockRatio.value, true);
         blobState.sleepFor(0);
@@ -854,7 +949,7 @@ const openSecMenu = () => {
 const sendToSleep = () => {
     const storedPreference = readStoredSleepSetupPreference();
     if (storedPreference) {
-        syncSleepSetupPreference({
+        syncSleepSetupDraft({
             amount: storedPreference.amount,
             unit: storedPreference.unit,
             rememberAsDefault: true,
@@ -874,7 +969,91 @@ const sendToSleep = () => {
 };
 
 const openSettings = () => {
-    window.alert("Work in progress");
+    closeMenu();
+    showSettingsModal.value = true;
+};
+
+const closeSettings = () => {
+    showSettingsModal.value = false;
+};
+
+const updateBlobSizeSetting = (nextValue) => {
+    syncAppSettings({ blobSize: clampPercent(nextValue) });
+};
+
+const updateSleepAmountSetting = (nextValue) => {
+    syncSleepSetupDraft({
+        amount: nextValue,
+        unit: sleepSetupDraft.value.unit,
+        rememberAsDefault: sleepSetupDraft.value.rememberAsDefault,
+    });
+};
+
+const updateSleepUnitSetting = (nextValue) => {
+    syncSleepSetupDraft({
+        amount: sleepSetupDraft.value.amount,
+        unit: nextValue,
+        rememberAsDefault: sleepSetupDraft.value.rememberAsDefault,
+    });
+};
+
+const updateAskEveryTimeSetting = (nextValue) => {
+    syncSleepSetupDraft({
+        amount: sleepSetupDraft.value.amount,
+        unit: sleepSetupDraft.value.unit,
+        rememberAsDefault: !Boolean(nextValue),
+    });
+};
+
+const updateSleepTagVisibleSetting = (nextValue) => {
+    syncAppSettings({ sleepTagVisible: Boolean(nextValue) });
+};
+
+const updateStartOnSystemRestartSetting = async (nextValue) => {
+    const desired = Boolean(nextValue);
+    syncAppSettings({ startOnSystemRestart: desired });
+
+    try {
+        const savedValue = await ipcRenderer?.invoke?.("app:set-start-on-restart", desired);
+        if (typeof savedValue === "boolean") {
+            syncAppSettings({ startOnSystemRestart: savedValue });
+        }
+    } catch (error) {
+        console.error("Failed to update startup setting:", error);
+    }
+};
+
+const redoOnboarding = async () => {
+    closeSettings();
+
+    try {
+        await ipcRenderer?.invoke?.("reset-onboarding-state");
+    } catch (error) {
+        console.error("Failed to redo onboarding:", error);
+    }
+};
+
+const clearJournal = async () => {
+    closeSettings();
+
+    try {
+        const didReset = await ipcRenderer?.invoke?.("journal:reset");
+        if (didReset) {
+            await journal.loadEntries();
+        }
+    } catch (error) {
+        console.error("Failed to clear journal:", error);
+    }
+};
+
+const hardReset = async () => {
+    closeSettings();
+
+    try {
+        await ipcRenderer?.invoke?.("app:hard-reset");
+    } catch (error) {
+        console.error("Failed to perform hard reset:", error);
+    }
 };
 
 const quitApplication = () => {
@@ -1064,7 +1243,7 @@ watch(journalOpen, (isOpen) => {
 });
 
 watch(
-    () => menuOpen.value || journalOpen.value || secMenuOpen.value || showPasswordModal.value || showSleepModal.value,
+    () => menuOpen.value || journalOpen.value || secMenuOpen.value || showPasswordModal.value || showSleepModal.value || showSettingsModal.value,
     (isInteractive) => {
         setInteractionLocked(isInteractive);
     },
@@ -1109,7 +1288,8 @@ onBeforeUnmount(() => {
             :face-eyes-style="{ transform: `translateY(-175%) translate(${eyesOffset.x}px, ${eyesOffset.y}px)`, transition: 'transform 0.3s ease' }"
             :outline-points="outlinePoints" :positions="positions" :blob-area-ref="setBlobAreaRef"
             :blob-edge-ref="setBlobEdgeRef" :emotion="visualEmotion" :is-active="menuOpen || journalOpen || secMenuOpen"
-            @start-drag="startDrag" @open-menu="openMenu" @open-sec-menu="openSecMenu" :state="blobState.state.value" />
+            :blob-scale="blobScale" @start-drag="startDrag" @open-menu="openMenu" @open-sec-menu="openSecMenu"
+            :state="blobState.state.value" />
 
         <Transition name="sleep-tag" @after-leave="onSleepTagAfterLeave">
             <button v-if="blobState.state.value === STATES.SLEEPING && !sleepTagHidden && sleepTagMounted"
@@ -1156,6 +1336,18 @@ onBeforeUnmount(() => {
                 :initial-unit="sleepSetupDraft.unit" @confirm="handleSleepSetupConfirm" @cancel="handleSleepSetupCancel"
                 @draft-change="syncSleepSetupDraft" />
         </Transition>
+
+        <Transition name="overlay-fade" appear>
+            <SettingsWindow v-if="showSettingsModal" :blob-size="appSettings.blobSize"
+                :sleep-amount="sleepSetupDraft.amount" :sleep-unit="sleepSetupDraft.unit"
+                :ask-every-time="!sleepSetupDraft.rememberAsDefault" :sleep-tag-visible="appSettings.sleepTagVisible"
+                :start-on-system-restart="appSettings.startOnSystemRestart" @close="closeSettings"
+                @update:blob-size="updateBlobSizeSetting" @update:sleep-amount="updateSleepAmountSetting"
+                @update:sleep-unit="updateSleepUnitSetting" @update:ask-every-time="updateAskEveryTimeSetting"
+                @update:sleep-tag-visible="updateSleepTagVisibleSetting"
+                @update:start-on-system-restart="updateStartOnSystemRestartSetting" @redo-onboarding="redoOnboarding"
+                @clear-journal="clearJournal" @hard-reset="hardReset" />
+        </Transition>
     </div>
 </template>
 
@@ -1189,8 +1381,6 @@ onBeforeUnmount(() => {
     padding: 1rem 0.75rem;
     background: var(--primary);
     color: var(--text-strong);
-    font-size: 0.9rem;
-    font-weight: 700;
     box-shadow: 0 0 0.5rem var(--shadow);
     transform: translateY(-50%);
     cursor: pointer;

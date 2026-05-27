@@ -143,6 +143,7 @@ export const useOnboarding = () => {
     const handleOnboardingStateChanged = (_, state) => {
         onboardingCompleted.value = state.completed;
         applyStateData(state.data);
+        ipcRenderer.send("set-ignore-mouse-events", !state.completed);
         if (!state.completed) {
             onboardingStep.value = 1;
         }

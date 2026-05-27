@@ -24,7 +24,7 @@ const randomBetween = (min, max) => min + Math.random() * (max - min);
 const lerp = (start, end, t) => start + (end - start) * t;
 const toDegrees = (radians) => (radians * 180) / Math.PI;
 
-export const useBlobPhysics = ({ ballRadii, activity, ipcRenderer }) => {
+export const useBlobPhysics = ({ ballRadii, blobScale, activity, ipcRenderer }) => {
     const positions = ref([]);
     const grabbing = ref(false);
     const blobArea = ref(null);
@@ -52,6 +52,9 @@ export const useBlobPhysics = ({ ballRadii, activity, ipcRenderer }) => {
     let lastDragMoveAt = 0;
     let interactionLocked = false;
     let lastSleepUpdateAt = 0;
+    let blobSizeScale = Math.max(0.5, Number(blobScale?.value) || 1);
+
+    const normalizeBlobScale = (value) => Math.max(0.5, Number(value) || 1);
 
     const setBlobAreaRef = (element) => {
         blobArea.value = element;
@@ -195,7 +198,9 @@ export const useBlobPhysics = ({ ballRadii, activity, ipcRenderer }) => {
             const p1Radius = positions.value[i % positions.value.length]?.radius ?? 1;
             const p2Radius = positions.value[(i + 1) % positions.value.length]?.radius ?? 1;
             const avgRadius = (p1Radius + p2Radius) / 2;
-            const smoothFactor = 0.25 * Math.max(0.8, Math.min(1.2, avgRadius / 20));
+            const scale = Math.max(0.5, blobSizeScale || 1);
+            const normalizedRadius = avgRadius / scale;
+            const smoothFactor = 0.25 * Math.max(0.8, Math.min(1.2, normalizedRadius / 20));
 
             const c1x = p1.x + (p2.x - p0.x) * smoothFactor;
             const c1y = p1.y + (p2.y - p0.y) * smoothFactor;
@@ -473,7 +478,7 @@ export const useBlobPhysics = ({ ballRadii, activity, ipcRenderer }) => {
 
         for (let i = 0; i < radii.length; i += 1) {
             const angle = (i / radii.length) * Math.PI * 2;
-            const radius = radii[i];
+            const radius = radii[i] * blobSizeScale;
             bodies.push(
                 Bodies.circle(centerX + Math.cos(angle) * spread, centerY + Math.sin(angle) * spread, radius, {
                     restitution: 0.8,
@@ -503,6 +508,41 @@ export const useBlobPhysics = ({ ballRadii, activity, ipcRenderer }) => {
         }
 
         return constraints;
+    };
+
+    const applyBlobSizeScale = (nextScaleValue) => {
+        const nextScale = normalizeBlobScale(nextScaleValue);
+        if (Math.abs(nextScale - blobSizeScale) < 0.0001) {
+            return;
+        }
+
+        const ratio = nextScale / blobSizeScale;
+        blobSizeScale = nextScale;
+
+        if (ballBodies.length === 0) {
+            return;
+        }
+
+        ballBodies.forEach((body) => {
+            Body.scale(body, ratio, ratio);
+        });
+
+        chainConstraints.forEach((constraint) => {
+            constraint.length *= ratio;
+        });
+
+        const { width, height } = getViewportBounds();
+        ballBodies.forEach((body) => {
+            const radius = body.circleRadius;
+            const x = Math.min(Math.max(body.position.x, radius), width - radius);
+            const y = Math.min(Math.max(body.position.y, radius), height - radius);
+            Body.setPosition(body, { x, y });
+        });
+
+        separateOverlappingBalls();
+        syncBallPositions();
+        updateSmoothBlobCenter();
+        savePosition();
     };
 
     const createWalls = (width, height) => {
@@ -845,9 +885,18 @@ export const useBlobPhysics = ({ ballRadii, activity, ipcRenderer }) => {
     };
 
     onMounted(() => {
+        blobSizeScale = normalizeBlobScale(blobScale?.value);
+
         engine = Engine.create({
             gravity: { x: 0, y: 0.8 },
         });
+
+        watch(
+            () => blobScale?.value,
+            (nextScale) => {
+                applyBlobSizeScale(nextScale);
+            }
+        );
 
         watch(
             state,

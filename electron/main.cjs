@@ -18,6 +18,31 @@ let encryptionKey = null;
 let isUnlocked = false;
 let storageService = null;
 
+function getStartOnLoginEnabled() {
+    try {
+        return app.getLoginItemSettings().openAtLogin === true;
+    } catch (error) {
+        console.error('Failed to read login item settings:', error);
+        return false;
+    }
+}
+
+function setStartOnLoginEnabled(enabled) {
+    const nextEnabled = Boolean(enabled);
+
+    try {
+        app.setLoginItemSettings({
+            openAtLogin: nextEnabled,
+            path: process.execPath,
+            args: [],
+        });
+        return getStartOnLoginEnabled();
+    } catch (error) {
+        console.error('Failed to update login item settings:', error);
+        return getStartOnLoginEnabled();
+    }
+}
+
 function setJournalUnlocked(nextUnlocked) {
     isUnlocked = Boolean(nextUnlocked);
 
@@ -174,6 +199,29 @@ function resetJournalState() {
     }
 }
 
+async function performHardReset() {
+    const didResetOnboarding = resetOnboardingState();
+    const didResetJournal = resetJournalState();
+    const didResetStartup = setStartOnLoginEnabled(true);
+
+    if (!didResetOnboarding || !didResetJournal || didResetStartup === undefined) {
+        return false;
+    }
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        try {
+            await mainWindow.webContents.executeJavaScript('window.localStorage.clear();');
+        } catch (error) {
+            console.error('Failed to clear localStorage during hard reset:', error);
+        }
+
+        mainWindow.setIgnoreMouseEvents(false, { forward: true });
+        await mainWindow.webContents.reloadIgnoringCache();
+    }
+
+    return true;
+}
+
 function encryptCipherData(plaintext, key) {
     const nonce = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv('aes-256-gcm', key, nonce);
@@ -306,6 +354,46 @@ function registerIpcHandlers() {
         }
 
         return nextState;
+    });
+
+    ipcMain.handle('reset-onboarding-state', () => {
+        const didReset = resetOnboardingState();
+        if (!didReset) {
+            throw new Error('Failed to reset onboarding state');
+        }
+
+        const state = readOnboardingState();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('onboarding-state-changed', state);
+        }
+
+        return state;
+    });
+
+    ipcMain.handle('app:get-start-on-restart', () => {
+        return getStartOnLoginEnabled();
+    });
+
+    ipcMain.handle('app:set-start-on-restart', (event, enabled) => {
+        return setStartOnLoginEnabled(enabled);
+    });
+
+    ipcMain.handle('journal:reset', () => {
+        const didReset = resetJournalState();
+        if (!didReset) {
+            throw new Error('Failed to reset journal state');
+        }
+
+        return true;
+    });
+
+    ipcMain.handle('app:hard-reset', async () => {
+        const didReset = await performHardReset();
+        if (!didReset) {
+            throw new Error('Failed to perform hard reset');
+        }
+
+        return true;
     });
 
     ipcMain.on('onboarding-complete', () => {
@@ -642,20 +730,7 @@ app.whenReady().then(async () => {
             {
                 label: "Reset",
                 click: async () => {
-                    const didReset = resetOnboardingState();
-                    const didResetJournal = resetJournalState();
-                    if (!didReset || !didResetJournal || !mainWindow) {
-                        return;
-                    }
-
-                    try {
-                        await mainWindow.webContents.executeJavaScript("window.localStorage.clear();");
-                    } catch (error) {
-                        console.error("Failed to clear localStorage:", error);
-                    }
-
-                    mainWindow.setIgnoreMouseEvents(false, { forward: true });
-                    await mainWindow.webContents.reloadIgnoringCache();
+                    await performHardReset();
                 },
             },
             { type: "separator" }

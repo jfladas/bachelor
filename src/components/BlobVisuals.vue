@@ -58,6 +58,10 @@ const props = defineProps({
         type: String,
         default: "default",
     },
+    blobScale: {
+        type: Number,
+        default: 1,
+    },
 });
 
 const dev = false; // dev mode shows physics bodies and outlines for debugging
@@ -77,6 +81,7 @@ const emotionKey = computed(() => (EMOTION_KEYS.has(props.emotion) ? props.emoti
 const rootStyle = computed(() => {
     const style = {
         ...props.hueVariables,
+        "--blob-scale": `${Math.max(0.5, Number(props.blobScale) || 1)}`,
     };
 
     if (emotionKey.value) {
@@ -226,6 +231,7 @@ function handlePointerDown(event) {
     opacity: 1;
     pointer-events: none;
     transform: translateX(var(--sleep-shift, 0px));
+    transform-origin: center;
     transition: transform 6s cubic-bezier(0.22, 0, 0.36, 1), opacity 0.2s linear;
 }
 
@@ -262,7 +268,8 @@ function handlePointerDown(event) {
     display: flex;
     pointer-events: none;
     width: 4.5rem;
-    transform: translateX(-50%);
+    transform: translateX(-50%) scale(var(--blob-scale, 1));
+    transform-origin: center;
     z-index: 2;
     user-select: none;
 }

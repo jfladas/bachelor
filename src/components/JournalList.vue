@@ -207,11 +207,17 @@ const getEntryText = (entry) => {
                     }" @contextmenu.prevent.stop="showContextFor(entry)" @click="activeContextId = null">
                     <div class="entry-content" :class="{ blurred: isEntryLocked(entry) }">
                         <div class="entry-header">
-                            <span v-if="entry.emotion" class="emotion-badge"
-                                :style="{ '--emotion-hue': `var(--${entry.emotion})` }">
+                            <span class="emotion-badge"
+                                :style="{ '--emotion-hue': entry.emotion ? `var(--${entry.emotion})` : 'var(--hue)' }">
                                 <span v-if="emotionTag(entry.emotion)?.svg" class="emotion-icon"
                                     v-html="emotionTag(entry.emotion).svg"></span>
-                                <span>{{ emotionLabel(entry.emotion) }}</span>
+                                <span v-else class="emotion-icon">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"
+                                        class="size-4">
+                                        <path d="M3.75 7.25a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5Z" />
+                                    </svg>
+                                </span>
+                                <span v-if="emotionLabel(entry.emotion)">{{ emotionLabel(entry.emotion) }}</span>
                             </span>
                             <span class="entry-date">
                                 {{ formatDate(entry.createdAt) }}
@@ -361,6 +367,13 @@ const getEntryText = (entry) => {
     transform: scale(0.9);
 }
 
+.emotion-icon svg {
+    width: 1rem;
+    height: 1rem;
+    display: block;
+    fill: currentColor;
+}
+
 .lock-icon {
     width: 0.8rem;
     height: 0.8rem;
@@ -379,7 +392,7 @@ const getEntryText = (entry) => {
     margin: 0.5rem 0 0 0;
     padding-left: 0.5rem;
     color: var(--text-strong);
-    font-size: 0.9rem;
+    font-size: 1rem;
     line-height: 1.4;
     display: -webkit-box;
     line-clamp: 1;

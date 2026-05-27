@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useMicroJournal } from '@/composables/useMicroJournal'
 import Button from './Button.vue'
+import NumberInput from './NumberInput.vue'
 
 const emit = defineEmits(['password-set', 'password-unlocked', 'cancel'])
 
@@ -21,8 +22,8 @@ const focusPinInput = async () => {
         return
     }
 
-    input.focus()
-    input.select()
+    await input.focusInput()
+    await input.selectInput()
 }
 
 const initialize = async () => {
@@ -38,17 +39,6 @@ watch(mode, async () => {
 
 const pinFull = computed(() => pin.value.length === 4)
 const pinConfirmFull = computed(() => pinConfirm.value.length === 4)
-
-const handlePinInput = (e, target) => {
-    const value = e.target.value
-    // Only allow digits, max 4
-    const sanitized = value.replace(/[^0-9]/g, '').slice(0, 4)
-    if (target === 'pin') {
-        pin.value = sanitized
-    } else {
-        pinConfirm.value = sanitized
-    }
-}
 
 const handleSetupPin = async () => {
     errorMessage.value = ''
@@ -100,7 +90,7 @@ const handleUnlockPin = async () => {
 </script>
 
 <template>
-    <div class="password-overlay">
+    <div class="overlay">
         <section class="window">
             <Button variant="secondary close-button circle-small" aria-label="Close PIN prompt" @click="emit('cancel')">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
@@ -114,12 +104,11 @@ const handleUnlockPin = async () => {
                 <p class="description">Set a 4-digit PIN to encrypt all your journal entries locally</p>
 
                 <div class="field pin-inputs">
-                    <input v-model="pin" type="text" inputmode="numeric" maxlength="4" placeholder="PIN"
-                        class="pin-input" :disabled="isLoading" @input="handlePinInput($event, 'pin')"
-                        ref="pinInputRef" />
-                    <input v-model="pinConfirm" type="text" inputmode="numeric" maxlength="4" placeholder="Confirm"
-                        class="pin-input" :disabled="isLoading" @input="handlePinInput($event, 'confirm')"
-                        @keyup.enter="handleSetupPin" />
+                    <NumberInput ref="pinInputRef" v-model="pin" variant="pin" max-length="4" placeholder="PIN"
+                        :disabled="isLoading" aria-label="PIN" wrapper-class="pin-input-field" />
+                    <NumberInput v-model="pinConfirm" variant="pin" max-length="4" placeholder="Confirm"
+                        :disabled="isLoading" aria-label="Confirm PIN" wrapper-class="pin-input-field"
+                        @enter="handleSetupPin" />
                 </div>
 
                 <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
@@ -139,9 +128,8 @@ const handleUnlockPin = async () => {
                 <p class="description">Enter your 4-digit PIN to access your entries</p>
 
                 <div class="field">
-                    <input v-model="pin" type="text" inputmode="numeric" maxlength="4" placeholder="PIN"
-                        class="pin-input" :disabled="isLoading" @input="handlePinInput($event, 'pin')" ref="pinInputRef"
-                        @keyup.enter="handleUnlockPin" />
+                    <NumberInput ref="pinInputRef" v-model="pin" variant="pin" max-length="4" placeholder="PIN"
+                        :disabled="isLoading" aria-label="PIN" @enter="handleUnlockPin" />
                 </div>
 
                 <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
@@ -156,17 +144,6 @@ const handleUnlockPin = async () => {
 </template>
 
 <style scoped>
-.password-overlay {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: radial-gradient(circle, transparent 50%, var(--shadow));
-    pointer-events: auto;
-    z-index: 1000;
-}
-
 .window {
     position: relative;
     width: 40rem;
@@ -176,44 +153,12 @@ const handleUnlockPin = async () => {
     padding-bottom: 6rem;
 }
 
-.pin-input {
-    border-radius: 1rem;
-    border: none;
-    background: var(--white);
-    color: var(--text-strong);
-    padding: 0.8rem;
-    line-height: 1.4;
-    font-size: 1.5rem;
-    font-weight: 600;
-    text-align: center;
-    letter-spacing: 0.5rem;
-}
-
-.pin-input::placeholder {
-    color: var(--text-muted);
-}
-
-.pin-input:focus-visible {
-    outline: 3px solid var(--lighter);
-    outline-offset: 2px;
-}
-
-.pin-input:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
 .pin-inputs {
     display: flex;
     gap: 1rem;
 }
 
-.hint,
-.error-message {
-    font-size: 1.2rem;
-    font-weight: 500;
-    font-family: 'GeneralSans-VariableItalic', 'GeneralSans-Italic', sans-serif;
-    color: var(--darker);
-    margin-bottom: 0rem;
+.pin-input-field {
+    flex: 1;
 }
 </style>
