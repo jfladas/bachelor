@@ -703,13 +703,32 @@ app.whenReady().then(async () => {
     mainWindow.setIgnoreMouseEvents(initialOnboardingState.completed, { forward: true });
 
     try {
-        let trayIcon = nativeImage.createFromPath(appIconPath);
+        // On macOS prefer a template (monochrome) image for the status/menu bar so
+        // it adapts automatically to light/dark appearances. Use `iconTemplate.png`
+        // if available. For other platforms use the standard app icon.
+        let trayImage;
 
-        if (trayIcon.isEmpty()) {
-            trayIcon = await app.getFileIcon(process.execPath, { size: "small" });
+        if (process.platform === 'darwin') {
+            const templatePath = path.join(__dirname, 'assets', 'iconTemplate.png');
+            if (fs.existsSync(templatePath)) {
+                trayImage = nativeImage.createFromPath(templatePath);
+                // Mark as template so macOS can tint it
+                try {
+                    trayImage.setTemplateImage(true);
+                } catch (err) {
+                    // Older Electron versions may not have setTemplateImage; ignore if unavailable
+                }
+            }
         }
 
-        tray = new Tray(trayIcon);
+        if (!trayImage) {
+            trayImage = nativeImage.createFromPath(appIconPath);
+            if (trayImage.isEmpty()) {
+                trayImage = await app.getFileIcon(process.execPath, { size: "small" });
+            }
+        }
+
+        tray = new Tray(trayImage);
         tray.setToolTip("Amorphous Blob");
         const trayMenuTemplate = [
             {
@@ -727,12 +746,6 @@ app.whenReady().then(async () => {
         ];
 
         trayMenuTemplate.push(
-            {
-                label: "Reset",
-                click: async () => {
-                    await performHardReset();
-                },
-            },
             { type: "separator" }
         );
 

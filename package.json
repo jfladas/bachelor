@@ -8,7 +8,8 @@
     "vue": "vite",
     "electron": "electron electron/main.cjs",
     "build:renderer": "vite build",
-    "build": "npm run build:renderer && electron-builder"
+    "build": "npm run build:renderer && electron-builder",
+    "generate:icns": "sh scripts/generate_icns.sh"
   },
   "dependencies": {
     "flubber": "^0.4.2",
@@ -43,6 +44,10 @@
         "portable"
       ],
       "icon": "electron/assets/icon.ico"
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "icon": "electron/assets/icon.icns"
     },
     "nsis": {
       "oneClick": false,
