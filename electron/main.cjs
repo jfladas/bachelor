@@ -31,11 +31,21 @@ function setStartOnLoginEnabled(enabled) {
     const nextEnabled = Boolean(enabled);
 
     try {
-        app.setLoginItemSettings({
-            openAtLogin: nextEnabled,
-            path: process.execPath,
-            args: [],
-        });
+        if (process.platform === 'darwin') {
+            // On macOS Electron expects the app bundle to manage login items.
+            // Passing the executable path can make the setting unreliable, so let
+            // Electron infer the current app and only request hidden launch.
+            app.setLoginItemSettings({
+                openAtLogin: nextEnabled,
+                openAsHidden: true,
+            });
+        } else {
+            app.setLoginItemSettings({
+                openAtLogin: nextEnabled,
+                path: process.execPath,
+                args: [],
+            });
+        }
         return getStartOnLoginEnabled();
     } catch (error) {
         console.error('Failed to update login item settings:', error);

@@ -46,7 +46,10 @@
       "icon": "electron/assets/icon.ico"
     },
     "mac": {
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "icon": "electron/assets/icon.icns"
     },
     "nsis": {
