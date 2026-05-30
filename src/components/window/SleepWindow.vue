@@ -1,9 +1,9 @@
 <script setup>
 import { computed, nextTick, onMounted, onBeforeUnmount, ref } from "vue";
-import Button from "./Button.vue";
-import Checkbox from "./Checkbox.vue";
-import Select from "./Select.vue";
-import NumberInput from "./NumberInput.vue";
+import Button from "../ui/Button.vue";
+import Checkbox from "../ui/Checkbox.vue";
+import Select from "../ui/Select.vue";
+import NumberInput from "../ui/NumberInput.vue";
 
 const props = defineProps({
     initialAmount: {
@@ -201,11 +201,9 @@ onMounted(() => {
 
 <style scoped>
 .window {
-    position: relative;
     width: 40rem;
     height: auto;
     z-index: 1001;
-    pointer-events: auto;
     padding-bottom: 6rem;
 }
 </style>

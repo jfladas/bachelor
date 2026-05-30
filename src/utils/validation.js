@@ -53,3 +53,23 @@ export const normalizeReaction = (
 
     return fallback;
 };
+
+export const clampPercent = (value, min = 50, max = 150) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 100;
+    return Math.min(max, Math.max(min, Math.round(n)));
+};
+
+export const clampSleepAmount = (value, min = 1, max = 999) => {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < min) return null;
+    return Math.min(max, Math.max(min, Math.round(n)));
+};
+
+export const normalizeSleepUnit = (unit) => (unit === 'minutes' || unit === 'until-woken-up' ? unit : 'hours');
+
+export const clampRatio = (value, min = 0.02, max = 0.98) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 0.5;
+    return Math.min(max, Math.max(min, n));
+};

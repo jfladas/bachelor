@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, ref } from "vue";
 import { clampHue } from "../../utils/validation";
-import Button from "../Button.vue";
+import Button from "../ui/Button.vue";
 
 const props = defineProps({
     hue: {

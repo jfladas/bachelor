@@ -16,7 +16,7 @@ class StorageService {
     /**
      * Check if journal is password protected (salt exists)
      */
-    isPasswordProtected() {
+    isPINProtected() {
         return fs.existsSync(this.saltFile);
     }
 

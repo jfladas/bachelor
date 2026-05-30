@@ -3,8 +3,7 @@ import { reactionOptions, sliderOptions, traitOptions } from "../constants/onboa
 import { calculateAssignedProfile } from "../utils/colorProfile";
 import { createHueVariables } from "../utils/themeColors";
 import { clampHue, clampUnit, normalizeReaction, normalizeTraits } from "../utils/validation";
-
-const { ipcRenderer } = require("electron");
+import * as ipc from "../utils/ipc";
 
 const TOTAL_ONBOARDING_STEPS = 3;
 const DEFAULT_SLIDER_VALUE = 0.5;
@@ -143,7 +142,7 @@ export const useOnboarding = () => {
     const handleOnboardingStateChanged = (_, state) => {
         onboardingCompleted.value = state.completed;
         applyStateData(state.data);
-        ipcRenderer.send("set-ignore-mouse-events", !state.completed);
+        try { ipc.send('set-ignore-mouse-events', !state.completed); } catch { }
         if (!state.completed) {
             onboardingStep.value = 1;
         }
@@ -170,10 +169,10 @@ export const useOnboarding = () => {
 
         try {
             const payload = createOnboardingStatePayload();
-            const savedState = await ipcRenderer.invoke("save-onboarding-state", payload);
+            const savedState = await ipc.invoke("save-onboarding-state", payload);
             applyStateData(savedState.data);
             onboardingCompleted.value = true;
-            ipcRenderer.send("set-ignore-mouse-events", true);
+            try { ipc.send('set-ignore-mouse-events', true); } catch { }
         } catch (error) {
             console.error("Failed to save onboarding state:", error);
         } finally {
@@ -186,18 +185,23 @@ export const useOnboarding = () => {
             return;
         }
 
-        ipcRenderer.send("set-ignore-mouse-events", !interactive);
+        try { ipc.send('set-ignore-mouse-events', !interactive); } catch { }
     };
 
     const closeApplication = () => {
-        ipcRenderer.send("quit-app");
+        try { ipc.send('quit-app'); } catch { }
     };
 
+    let removeOnboardingListener = null;
     onMounted(async () => {
-        ipcRenderer.on("onboarding-state-changed", handleOnboardingStateChanged);
+        (async () => {
+            const _ipc = await ipc.ipc();
+            _ipc?.on?.("onboarding-state-changed", handleOnboardingStateChanged);
+            removeOnboardingListener = () => _ipc?.removeListener?.("onboarding-state-changed", handleOnboardingStateChanged);
+        })();
 
         try {
-            const state = await ipcRenderer.invoke("get-onboarding-state");
+            const state = await ipc.invoke("get-onboarding-state");
             onboardingCompleted.value = state.completed;
             applyStateData(state.data);
         } catch (error) {
@@ -207,19 +211,17 @@ export const useOnboarding = () => {
             onboardingLoaded.value = true;
         }
 
-        if (!onboardingCompleted.value) {
-            ipcRenderer.send("set-ignore-mouse-events", true);
-        }
+        try { ipc.send('set-ignore-mouse-events', true); } catch { }
     });
 
     watch(questionAnswers, updateAssignedProfile, { deep: true });
     watch(selectedTraits, updateAssignedProfile, { deep: true });
 
     onBeforeUnmount(() => {
-        ipcRenderer.removeListener("onboarding-state-changed", handleOnboardingStateChanged);
-        if (!onboardingCompleted.value) {
-            ipcRenderer.send("set-ignore-mouse-events", true);
+        if (typeof removeOnboardingListener === 'function') {
+            try { removeOnboardingListener(); } catch { }
         }
+        try { ipc.send('set-ignore-mouse-events', true); } catch { }
     });
 
     return {

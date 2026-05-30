@@ -1,10 +1,10 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import Button from "./Button.vue";
-import Checkbox from "./Checkbox.vue";
-import Select from "./Select.vue";
-import NumberInput from "./NumberInput.vue";
-import RangeSlider from "./RangeSlider.vue";
+import Button from "../ui/Button.vue";
+import Checkbox from "../ui/Checkbox.vue";
+import Select from "../ui/Select.vue";
+import NumberInput from "../ui/NumberInput.vue";
+import RangeSlider from "../ui/RangeSlider.vue";
 
 const props = defineProps({
     visible: {
@@ -297,14 +297,12 @@ watch(
 
 <style scoped>
 .window {
-    position: relative;
     width: 40rem;
     max-width: calc(100vw - 2rem);
     max-height: calc(100vh - 2rem);
     overflow: auto;
     z-index: 1001;
-    pointer-events: auto;
-    padding-bottom: 6rem;
+    padding-bottom: 3rem;
 }
 
 .title {
@@ -317,7 +315,7 @@ watch(
 
 .danger-actions {
     display: flex;
-    gap: 1rem;
+    gap: 0.75rem;
     margin-top: 1rem;
 }
 

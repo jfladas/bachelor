@@ -1,6 +1,6 @@
 <script setup>
-import Button from "../Button.vue";
-import RangeSlider from "../RangeSlider.vue";
+import Button from "../ui/Button.vue";
+import RangeSlider from "../ui/RangeSlider.vue";
 
 const props = defineProps({
     questionAnswers: {

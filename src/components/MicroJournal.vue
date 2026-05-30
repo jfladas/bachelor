@@ -1,6 +1,6 @@
 <script setup>
 import { ref, watch, computed, nextTick } from "vue";
-import Button from "./Button.vue";
+import Button from "./ui/Button.vue";
 import JournalList from "./JournalList.vue";
 
 const props = defineProps({
@@ -246,7 +246,8 @@ const listAreaStyle = computed(() => {
                     Show text field
                 </Button>
             </div>
-            <div v-if="props.promptVisible" class="subpanel optional">
+            <div v-if="props.promptVisible" class="subpanel optional"
+                :style="emotionVisible && props.selectedEmotion ? '--emotion-hue: var(--' + props.selectedEmotion + ')' : '--emotion-hue: var(--hue)'">
                 <button type="button" class="remove-option" aria-label="Remove prompt" @click="hidePromptSection">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
                         <path
@@ -431,7 +432,7 @@ const listAreaStyle = computed(() => {
     font-size: 1.2rem;
     font-weight: 500;
     font-family: 'GeneralSans-VariableItalic', 'GeneralSans-Italic', sans-serif;
-    color: var(--darker);
+    color: oklch(var(--darker-l) var(--darker-c) var(--emotion-hue));
     margin: 0 0 1rem 0;
 }
 

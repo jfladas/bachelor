@@ -1,8 +1,8 @@
 <script setup>
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useMicroJournal } from '@/composables/useMicroJournal'
-import Button from './Button.vue'
-import NumberInput from './NumberInput.vue'
+import Button from '../ui/Button.vue'
+import NumberInput from '../ui/NumberInput.vue'
 
 const emit = defineEmits(['password-set', 'password-unlocked', 'cancel'])
 
@@ -145,11 +145,9 @@ const handleUnlockPin = async () => {
 
 <style scoped>
 .window {
-    position: relative;
     width: 40rem;
     height: auto;
     z-index: 1001;
-    pointer-events: auto;
     padding-bottom: 6rem;
 }
 

@@ -420,7 +420,7 @@ function registerIpcHandlers() {
     // Journal encryption handlers
     ipcMain.handle('journal:is-password-protected', () => {
         if (!storageService) return false;
-        return storageService.isPasswordProtected();
+        return storageService.isPINProtected();
     });
 
     ipcMain.handle('journal:get-metadata', () => {

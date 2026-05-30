@@ -3,16 +3,18 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import BlobVisuals from "./BlobVisuals.vue";
 import RadialMenu from "./RadialMenu.vue";
 import MicroJournal from "./MicroJournal.vue";
-import PasswordSetup from "./PasswordSetup.vue";
-import SleepSetup from "./SleepSetup.vue";
-import SettingsWindow from "./SettingsWindow.vue";
+import PINWindow from "./window/PINWindow.vue";
+import SleepWindow from "./window/SleepWindow.vue";
+import SettingsWindow from "./window/SettingsWindow.vue";
 import { useBlobPhysics } from "../composables/useBlobPhysics";
 import { STATES } from "../composables/useBlobState";
 import { useBlobFace } from "../composables/useBlobFace";
 import { useBlobState } from "../composables/useBlobState";
 import { useMicroJournal } from "../composables/useMicroJournal";
 import { createHueVariables } from "../utils/themeColors";
-import { clampHue, clampUnit } from "../utils/validation";
+import { clampHue, clampUnit, clampPercent } from "../utils/validation";
+import * as storage from "../utils/storage";
+import * as ipc from "../utils/ipc";
 
 const props = defineProps({
     onboardingData: {
@@ -28,21 +30,16 @@ const props = defineProps({
     },
 });
 
-const { ipcRenderer } = require("electron");
-
 const BALL_COUNT = 5;
 const BASE_BALL_RADIUS = 20;
 const MAX_RADIUS_VARIATION = 3;
 const MIN_BALL_RADIUS = 15;
 const EDGE_WIDTH = 20;
-const SETTINGS_STORAGE_KEY = "amorphous-blob:settings";
-const SLEEP_STORAGE_KEY = "amorphous-blob:sleep-state";
-const SLEEP_SETUP_DRAFT_KEY = "amorphous-blob:sleep-setup-draft";
-const SLEEP_SETUP_PREFERENCE_KEY = "amorphous-blob:sleep-setup-preference";
+// storage helper handles keys
 const SLEEP_TAG_MIN_RATIO = 0.02;
 const SLEEP_TAG_MAX_RATIO = 0.98;
 
-const clampPercent = (value) => Math.min(150, Math.max(50, Math.round(Number(value) || 100)));
+// use shared clampPercent from validation
 
 const hue = computed(() => {
     return clampHue(props.onboardingData?.hue, 220);
@@ -90,35 +87,6 @@ const normalizeAppSettings = (settings = {}) => ({
     startOnSystemRestart: settings?.startOnSystemRestart !== false,
 });
 
-const readStoredAppSettings = () => {
-    try {
-        const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
-        if (!raw) {
-            return null;
-        }
-
-        return normalizeAppSettings(JSON.parse(raw));
-    } catch {
-        return null;
-    }
-};
-
-const writeStoredAppSettings = (settings) => {
-    try {
-        window.localStorage.setItem(
-            SETTINGS_STORAGE_KEY,
-            JSON.stringify({
-                blobSize: clampPercent(settings?.blobSize),
-                sleepTagVisible: settings?.sleepTagVisible !== false,
-                startOnSystemRestart: settings?.startOnSystemRestart !== false,
-                savedAt: Date.now(),
-            })
-        );
-    } catch {
-        // Ignore storage failures and keep the in-memory settings.
-    }
-};
-
 const appSettings = ref(createDefaultAppSettings());
 const settingsLoaded = ref(false);
 const showSettingsModal = ref(false);
@@ -141,7 +109,6 @@ const {
     ballRadii,
     blobScale,
     activity,
-    ipcRenderer,
 });
 
 const { faceParts, setFace, startEyeFollow, stopEyeFollow, eyesOffset } = useBlobFace();
@@ -187,7 +154,7 @@ const journalPromptVisible = ref(false);
 const journalEmotionVisible = ref(true);
 const journalTextVisible = ref(true);
 const secMenuOpen = ref(false);
-const showPasswordModal = ref(false);
+const showPINModal = ref(false);
 const showSleepModal = ref(false);
 const sleepTimerId = ref(null);
 const sleepEmotionRestoreTimerId = ref(null);
@@ -219,136 +186,43 @@ onMounted(() => {
     hydrateAppSettings();
 });
 
-const readStoredSleepSetupDraft = () => {
-    try {
-        const raw = window.localStorage.getItem(SLEEP_SETUP_DRAFT_KEY);
-        if (!raw) {
-            return null;
-        }
-
-        const parsed = JSON.parse(raw);
-        const amount = Number(parsed?.amount);
-        const unit = parsed?.unit === "minutes" || parsed?.unit === "until-woken-up" ? parsed.unit : "hours";
-        const rememberAsDefault = parsed?.rememberAsDefault === true;
-
-        if (!Number.isFinite(amount) || amount < 1) {
-            return null;
-        }
-
-        return {
-            amount: Math.min(999, Math.round(amount)),
-            unit,
-            rememberAsDefault,
-        };
-    } catch {
-        return null;
-    }
-};
-
-const writeStoredSleepSetupDraft = (draft) => {
-    try {
-        window.localStorage.setItem(
-            SLEEP_SETUP_DRAFT_KEY,
-            JSON.stringify({
-                amount: Math.min(999, Math.max(1, Math.round(Number(draft?.amount) || 1))),
-                unit: draft?.unit === "minutes" || draft?.unit === "until-woken-up" ? draft.unit : "hours",
-                rememberAsDefault: draft?.rememberAsDefault === true,
-                savedAt: Date.now(),
-            })
-        );
-    } catch {
-        // Ignore storage failures and keep the in-memory draft.
-    }
-};
-
-const syncSleepSetupDraft = (draft) => {
+const syncSleepDraft = (draft) => {
     const amount = Math.min(999, Math.max(1, Math.round(Number(draft?.amount) || 1)));
     const unit = draft?.unit === "minutes" || draft?.unit === "until-woken-up" ? draft.unit : "hours";
     const rememberAsDefault = draft?.rememberAsDefault === true;
 
     sleepSetupDraft.value = { amount, unit, rememberAsDefault };
-    writeStoredSleepSetupDraft(sleepSetupDraft.value);
+    storage.writeSleepDraft(sleepSetupDraft.value);
     if (rememberAsDefault) {
-        writeStoredSleepSetupPreference(sleepSetupDraft.value);
+        storage.writeSleepPreference(sleepSetupDraft.value);
         return;
     }
 
-    clearStoredSleepSetupPreference();
+    try { storage.clearSleepPreference(); } catch { }
 };
 
-const readStoredSleepSetupPreference = () => {
-    try {
-        const raw = window.localStorage.getItem(SLEEP_SETUP_PREFERENCE_KEY);
-        if (!raw) {
-            return null;
-        }
-
-        const parsed = JSON.parse(raw);
-        if (!parsed || parsed.enabled !== true) {
-            return null;
-        }
-
-        const amount = Number(parsed.amount);
-        if (!Number.isFinite(amount) || amount < 1) {
-            return null;
-        }
-
-        return {
-            enabled: true,
-            amount: Math.min(999, Math.round(amount)),
-            unit: parsed.unit === "minutes" || parsed.unit === "until-woken-up" ? parsed.unit : "hours",
-        };
-    } catch {
-        return null;
-    }
-};
-
-const writeStoredSleepSetupPreference = (draft) => {
-    try {
-        window.localStorage.setItem(
-            SLEEP_SETUP_PREFERENCE_KEY,
-            JSON.stringify({
-                enabled: draft?.rememberAsDefault === true,
-                amount: Math.min(999, Math.max(1, Math.round(Number(draft?.amount) || 1))),
-                unit: draft?.unit === "minutes" || draft?.unit === "until-woken-up" ? draft.unit : "hours",
-                savedAt: Date.now(),
-            })
-        );
-    } catch {
-        // Ignore storage failures and keep the in-memory preference.
-    }
-};
-
-const clearStoredSleepSetupPreference = () => {
-    try {
-        window.localStorage.removeItem(SLEEP_SETUP_PREFERENCE_KEY);
-    } catch {
-        // Ignore storage failures.
-    }
-};
-
-const syncSleepSetupPreference = (draft) => {
+const syncSleepPreference = (draft) => {
     const amount = Math.min(999, Math.max(1, Math.round(Number(draft?.amount) || 1)));
     const unit = draft?.unit === "minutes" || draft?.unit === "until-woken-up" ? draft.unit : "hours";
     const rememberAsDefault = draft?.rememberAsDefault === true;
 
     sleepSetupDraft.value = { amount, unit, rememberAsDefault };
-    writeStoredSleepSetupDraft(sleepSetupDraft.value);
+    storage.writeSleepDraft(sleepSetupDraft.value);
     if (rememberAsDefault) {
-        writeStoredSleepSetupPreference(sleepSetupDraft.value);
+        storage.writeSleepPreference(sleepSetupDraft.value);
         return;
     }
 
-    clearStoredSleepSetupPreference();
+    try { storage.clearSleepPreference(); } catch { }
 };
 
-const hydrateSleepSetupDraft = () => {
-    const storedDraft = readStoredSleepSetupDraft();
+const hydrateSleepDraft = () => {
+    const storedDraft = storage.readSleepDraft();
     if (storedDraft) {
         sleepSetupDraft.value = storedDraft;
     }
 
-    const storedPreference = readStoredSleepSetupPreference();
+    const storedPreference = storage.readSleepPreference();
     if (storedPreference) {
         sleepSetupDraft.value = {
             amount: storedPreference.amount,
@@ -358,24 +232,19 @@ const hydrateSleepSetupDraft = () => {
     }
 };
 
-hydrateSleepSetupDraft();
+hydrateSleepDraft();
 
 const hydrateAppSettings = async () => {
-    const storedSettings = readStoredAppSettings();
+    const storedSettings = storage.readSettings();
     if (storedSettings) {
         appSettings.value = normalizeAppSettings(storedSettings);
     }
 
     try {
-        if (!ipcRenderer?.invoke) {
-            settingsLoaded.value = true;
-            return;
-        }
-
-        const startOnSystemRestart = await ipcRenderer.invoke("app:get-start-on-restart");
+        const startOnSystemRestart = await ipc.invoke("app:get-start-on-restart");
         if (typeof startOnSystemRestart === "boolean") {
             appSettings.value.startOnSystemRestart = startOnSystemRestart;
-            writeStoredAppSettings(appSettings.value);
+            storage.writeSettings(appSettings.value);
         }
     } catch (error) {
         if (!String(error?.message || error).includes("No handler registered")) {
@@ -391,7 +260,7 @@ const syncAppSettings = (nextSettings = {}) => {
         ...appSettings.value,
         ...nextSettings,
     });
-    writeStoredAppSettings(appSettings.value);
+    storage.writeSettings(appSettings.value);
 };
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -565,59 +434,9 @@ const restoreFaceEmotionAfterSleep = () => {
     }, 3000);
 };
 
-const readStoredSleepState = () => {
-    try {
-        const raw = window.localStorage.getItem(SLEEP_STORAGE_KEY);
-        if (!raw) {
-            return null;
-        }
-
-        const parsed = JSON.parse(raw);
-        const indefinite = parsed?.indefinite === true;
-
-        if (!indefinite && !Number.isFinite(parsed?.wakeAt)) {
-            return null;
-        }
-
-        return {
-            wakeAt: indefinite ? null : Math.max(0, Math.round(parsed.wakeAt)),
-            indefinite,
-            dockSide: parsed.dockSide === "left" ? "left" : "right",
-            dockRatio: Number.isFinite(parsed.dockRatio)
-                ? Math.min(SLEEP_TAG_MAX_RATIO, Math.max(SLEEP_TAG_MIN_RATIO, parsed.dockRatio))
-                : 0.5,
-            showWakeTag: parsed.showWakeTag !== false,
-        };
-    } catch {
-        return null;
-    }
-};
-
-const writeStoredSleepState = (wakeAt, dockSide, dockRatio = 0.5, indefinite = false) => {
-    try {
-        window.localStorage.setItem(
-            SLEEP_STORAGE_KEY,
-            JSON.stringify({
-                wakeAt: indefinite ? null : Math.max(0, Math.round(wakeAt)),
-                indefinite: Boolean(indefinite),
-                dockSide: dockSide === "left" ? "left" : "right",
-                dockRatio: Math.min(SLEEP_TAG_MAX_RATIO, Math.max(SLEEP_TAG_MIN_RATIO, dockRatio)),
-                showWakeTag: !sleepTagHidden.value,
-                savedAt: Date.now(),
-            })
-        );
-    } catch {
-        // Ignore storage failures and fall back to the in-memory timer.
-    }
-};
-
-const clearStoredSleepState = () => {
-    try {
-        window.localStorage.removeItem(SLEEP_STORAGE_KEY);
-    } catch {
-        // Ignore storage failures.
-    }
-};
+const readStoredSleepState = () => storage.readSleepState();
+const writeStoredSleepState = (wakeAt, dockSide, dockRatio = 0.5, indefinite = false) => storage.writeSleepState(wakeAt, dockSide, dockRatio, indefinite, !sleepTagHidden.value);
+const clearStoredSleepState = () => storage.clearSleepState();
 
 const setIgnoreMouseEvents = (ignore) => {
     const nextIgnore = Boolean(ignore);
@@ -626,7 +445,7 @@ const setIgnoreMouseEvents = (ignore) => {
     }
 
     isIgnoringMouseEvents.value = nextIgnore;
-    ipcRenderer?.send?.("set-ignore-mouse-events", nextIgnore);
+    try { ipc.send('set-ignore-mouse-events', nextIgnore); } catch { }
 };
 
 const sleepTagStyle = computed(() => ({
@@ -865,14 +684,14 @@ const wakeFromSleep = ({ animateTag = true } = {}) => {
     performWakeFromSleep();
 };
 
-const handleSleepSetupConfirm = (payload) => {
+const handleSleepConfirm = (payload) => {
     const normalizedPayload = typeof payload === "number" ? { durationMs: payload } : payload || {};
     const durationMs = Number(normalizedPayload.durationMs);
     const untilWokenUp = normalizedPayload.unit === "until-woken-up";
     showSleepModal.value = false;
     closeMenu();
 
-    syncSleepSetupDraft(sleepSetupDraft.value);
+    syncSleepDraft(sleepSetupDraft.value);
 
     clearSleepTimer();
     sleepDockSide.value = resolveSleepSide();
@@ -902,7 +721,7 @@ const handleSleepSetupConfirm = (payload) => {
     }, Math.max(0, wakeAt - Date.now()));
 };
 
-const handleSleepSetupCancel = () => {
+const handleSleepCancel = () => {
     showSleepModal.value = false;
 };
 
@@ -947,14 +766,14 @@ const openSecMenu = () => {
 };
 
 const sendToSleep = () => {
-    const storedPreference = readStoredSleepSetupPreference();
+    const storedPreference = storage.readSleepPreference();
     if (storedPreference) {
-        syncSleepSetupDraft({
+        syncSleepDraft({
             amount: storedPreference.amount,
             unit: storedPreference.unit,
             rememberAsDefault: true,
         });
-        handleSleepSetupConfirm({
+        handleSleepConfirm({
             durationMs: storedPreference.unit === "until-woken-up"
                 ? null
                 : Math.max(60 * 1000, storedPreference.amount * (storedPreference.unit === "minutes" ? 60 * 1000 : 60 * 60 * 1000)),
@@ -982,7 +801,7 @@ const updateBlobSizeSetting = (nextValue) => {
 };
 
 const updateSleepAmountSetting = (nextValue) => {
-    syncSleepSetupDraft({
+    syncSleepDraft({
         amount: nextValue,
         unit: sleepSetupDraft.value.unit,
         rememberAsDefault: sleepSetupDraft.value.rememberAsDefault,
@@ -990,7 +809,7 @@ const updateSleepAmountSetting = (nextValue) => {
 };
 
 const updateSleepUnitSetting = (nextValue) => {
-    syncSleepSetupDraft({
+    syncSleepDraft({
         amount: sleepSetupDraft.value.amount,
         unit: nextValue,
         rememberAsDefault: sleepSetupDraft.value.rememberAsDefault,
@@ -998,7 +817,7 @@ const updateSleepUnitSetting = (nextValue) => {
 };
 
 const updateAskEveryTimeSetting = (nextValue) => {
-    syncSleepSetupDraft({
+    syncSleepDraft({
         amount: sleepSetupDraft.value.amount,
         unit: sleepSetupDraft.value.unit,
         rememberAsDefault: !Boolean(nextValue),
@@ -1014,7 +833,7 @@ const updateStartOnSystemRestartSetting = async (nextValue) => {
     syncAppSettings({ startOnSystemRestart: desired });
 
     try {
-        const savedValue = await ipcRenderer?.invoke?.("app:set-start-on-restart", desired);
+        const savedValue = await ipc.invoke("app:set-start-on-restart", desired);
         if (typeof savedValue === "boolean") {
             syncAppSettings({ startOnSystemRestart: savedValue });
         }
@@ -1027,7 +846,7 @@ const redoOnboarding = async () => {
     closeSettings();
 
     try {
-        await ipcRenderer?.invoke?.("reset-onboarding-state");
+        await ipc.invoke("reset-onboarding-state");
     } catch (error) {
         console.error("Failed to redo onboarding:", error);
     }
@@ -1037,7 +856,7 @@ const clearJournal = async () => {
     closeSettings();
 
     try {
-        const didReset = await ipcRenderer?.invoke?.("journal:reset");
+        const didReset = await ipc.invoke("journal:reset");
         if (didReset) {
             await journal.loadEntries();
         }
@@ -1050,7 +869,7 @@ const hardReset = async () => {
     closeSettings();
 
     try {
-        await ipcRenderer?.invoke?.("app:hard-reset");
+        await ipc.invoke("app:hard-reset");
     } catch (error) {
         console.error("Failed to perform hard reset:", error);
     }
@@ -1058,7 +877,7 @@ const hardReset = async () => {
 
 const quitApplication = () => {
     closeMenu({ clearDraft: true });
-    ipcRenderer?.send?.("quit-app");
+    try { ipc.send('quit-app'); } catch { }
 };
 
 const submitJournal = async (entryOptions = {}) => {
@@ -1067,7 +886,7 @@ const submitJournal = async (entryOptions = {}) => {
             const protectedAlready = await isPinProtected();
             if (!protectedAlready) {
                 pendingEntryOptions.value = entryOptions;
-                showPasswordModal.value = true;
+                showPINModal.value = true;
 
                 await new Promise((resolve, reject) => {
                     _passwordSetupResolve.ref = resolve;
@@ -1094,7 +913,7 @@ const submitJournal = async (entryOptions = {}) => {
 };
 
 const handleUnlockEntry = async () => {
-    showPasswordModal.value = true;
+    showPINModal.value = true;
 };
 
 const handleDeleteEntry = async (entryId) => {
@@ -1105,8 +924,8 @@ const handleDeleteEntry = async (entryId) => {
     }
 };
 
-const handlePasswordSetupComplete = async () => {
-    showPasswordModal.value = false;
+const handlePINComplete = async () => {
+    showPINModal.value = false;
     // resolve any pending submit waiting for PIN setup
     if (_passwordSetupResolve.ref) {
         _passwordSetupResolve.ref(true);
@@ -1115,8 +934,8 @@ const handlePasswordSetupComplete = async () => {
     _passwordSetupReject.ref = null;
 };
 
-const handlePasswordSetupCancel = async () => {
-    showPasswordModal.value = false;
+const handlePINCancel = async () => {
+    showPINModal.value = false;
     if (_passwordSetupReject.ref) {
         _passwordSetupReject.ref(new Error('cancelled'));
         _passwordSetupReject.ref = null;
@@ -1222,8 +1041,11 @@ onMounted(() => {
         }
     };
 
-    ipcRenderer?.on?.("tray:wake-blob", onTrayWake);
-    removeTrayWakeListener = () => ipcRenderer?.removeListener?.("tray:wake-blob", onTrayWake);
+    (async () => {
+        const _ipc = await ipc.ipc();
+        _ipc?.on?.("tray:wake-blob", onTrayWake);
+        removeTrayWakeListener = () => _ipc?.removeListener?.("tray:wake-blob", onTrayWake);
+    })();
 });
 
 watch(grabbing, (isGrabbing) => {
@@ -1243,7 +1065,7 @@ watch(journalOpen, (isOpen) => {
 });
 
 watch(
-    () => menuOpen.value || journalOpen.value || secMenuOpen.value || showPasswordModal.value || showSleepModal.value || showSettingsModal.value,
+    () => menuOpen.value || journalOpen.value || secMenuOpen.value || showPINModal.value || showSleepModal.value || showSettingsModal.value,
     (isInteractive) => {
         setInteractionLocked(isInteractive);
     },
@@ -1327,14 +1149,14 @@ onBeforeUnmount(() => {
             @delete-entry="handleDeleteEntry" />
 
         <Transition name="overlay-fade" appear>
-            <PasswordSetup v-if="showPasswordModal" @password-set="handlePasswordSetupComplete"
-                @password-unlocked="handlePasswordSetupComplete" @cancel="handlePasswordSetupCancel" />
+            <PINWindow v-if="showPINModal" @password-set="handlePINComplete" @password-unlocked="handlePINComplete"
+                @cancel="handlePINCancel" />
         </Transition>
 
         <Transition name="overlay-fade" appear>
-            <SleepSetup v-if="showSleepModal" :initial-amount="sleepSetupDraft.amount"
-                :initial-unit="sleepSetupDraft.unit" @confirm="handleSleepSetupConfirm" @cancel="handleSleepSetupCancel"
-                @draft-change="syncSleepSetupDraft" />
+            <SleepWindow v-if="showSleepModal" :initial-amount="sleepSetupDraft.amount"
+                :initial-unit="sleepSetupDraft.unit" @confirm="handleSleepConfirm" @cancel="handleSleepCancel"
+                @draft-change="syncSleepDraft" />
         </Transition>
 
         <Transition name="overlay-fade" appear>

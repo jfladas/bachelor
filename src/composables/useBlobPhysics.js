@@ -17,14 +17,16 @@ const BASE_NUDGE_VELOCITY = 0.5;
 const IDLE_NUDGE_BLEND = 0.8;
 const SLEEP_UPDATE_INTERVAL_MS = 33;
 const SLEEP_TIME_SCALE = 0.2;
-const POSITION_STORAGE_KEY = "amorphous-blob:blob-center";
 const PERSIST_INTERVAL_MS = 500;
 
 const randomBetween = (min, max) => min + Math.random() * (max - min);
 const lerp = (start, end, t) => start + (end - start) * t;
 const toDegrees = (radians) => (radians * 180) / Math.PI;
 
-export const useBlobPhysics = ({ ballRadii, blobScale, activity, ipcRenderer }) => {
+import * as ipc from '../utils/ipc'
+import * as storage from '../utils/storage'
+
+export const useBlobPhysics = ({ ballRadii, blobScale, activity }) => {
     const positions = ref([]);
     const grabbing = ref(false);
     const blobArea = ref(null);
@@ -102,37 +104,13 @@ export const useBlobPhysics = ({ ballRadii, blobScale, activity, ipcRenderer }) 
 
     const savePosition = () => {
         const center = getBallClusterCenter();
-        if (!center) {
-            return;
-        }
-
-        const { width, height } = getViewportBounds();
-        const payload = {
-            xRatio: Math.min(1, Math.max(0, center.x / width)),
-            yRatio: Math.min(1, Math.max(0, center.y / height)),
-            savedAt: Date.now(),
-        };
-
-        window.localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(payload));
+        if (!center) return;
+        try { storage.writePosition(center); } catch { }
     };
 
     const getSavedCenter = () => {
         try {
-            const raw = window.localStorage.getItem(POSITION_STORAGE_KEY);
-            if (!raw) {
-                return null;
-            }
-
-            const parsed = JSON.parse(raw);
-            if (!Number.isFinite(parsed?.xRatio) || !Number.isFinite(parsed?.yRatio)) {
-                return null;
-            }
-
-            const { width, height } = getViewportBounds();
-            return {
-                x: Math.min(width, Math.max(0, parsed.xRatio * width)),
-                y: Math.min(height, Math.max(0, parsed.yRatio * height)),
-            };
+            return storage.readPosition();
         } catch {
             return null;
         }
@@ -762,7 +740,10 @@ export const useBlobPhysics = ({ ballRadii, blobScale, activity, ipcRenderer }) 
     };
 
     const sendIgnoreMouseEvents = (ignoreMouseEvents) => {
-        ipcRenderer?.send?.("set-ignore-mouse-events", ignoreMouseEvents);
+        // best-effort fire-and-forget
+        try {
+            ipc.send('set-ignore-mouse-events', ignoreMouseEvents);
+        } catch { }
     };
 
     const updateHoverState = () => {

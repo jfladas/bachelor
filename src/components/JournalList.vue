@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
-import Button from './Button.vue'
+import Button from './ui/Button.vue'
 
 const props = defineProps({
     visible: {
