@@ -62,6 +62,18 @@ const props = defineProps({
         type: Number,
         default: 1,
     },
+    pinProgress: {
+        type: Number,
+        default: 0,
+    },
+    pinAnchor: {
+        type: Object,
+        default: null,
+    },
+    isPinned: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const dev = false; // dev mode shows physics bodies and outlines for debugging
@@ -147,6 +159,32 @@ const gradientPalette = computed(() => {
 
 const blobFill = computed(() => (emotionKey.value ? `url(#${accentGradientId})` : "var(--primary)"));
 
+const pinTarget = computed(() => {
+    const target = props.pinAnchor;
+    if (!target || !Number.isFinite(target.x) || !Number.isFinite(target.y) || !Number.isFinite(target.radius)) {
+        return null;
+    }
+
+    const radius = 10;
+    const circumference = 2 * Math.PI * radius;
+
+    return {
+        cx: target.x + 40,
+        cy: target.y - 40,
+        radius,
+        circumference,
+    };
+});
+
+const pinStrokeDashoffset = computed(() => {
+    if (!pinTarget.value) {
+        return 0;
+    }
+
+    const progress = Math.max(0, Math.min(1, Number(props.pinProgress) || 0));
+    return pinTarget.value.circumference * (1 - progress);
+});
+
 function handlePointerDown(event) {
     downPos.value = { x: event.clientX, y: event.clientY };
     emit('start-drag', event);
@@ -214,6 +252,13 @@ function handlePointerDown(event) {
                 :y2="props.positions[(index + 1) % props.positions.length]?.y + props.positions[(index + 1) % props.positions.length]?.radius" />
         </svg>
 
+        <svg v-if="pinTarget" class="pin-progress" aria-hidden="true">
+            <circle class="pin-progress-track" :cx="pinTarget.cx" :cy="pinTarget.cy" :r="pinTarget.radius" />
+            <circle class="pin-progress-ring" :cx="pinTarget.cx" :cy="pinTarget.cy" :r="pinTarget.radius"
+                :stroke-dasharray="`${pinTarget.circumference} ${pinTarget.circumference}`"
+                :stroke-dashoffset="pinStrokeDashoffset" :class="{ pinned: props.isPinned }" />
+        </svg>
+
         <div v-if="dev" v-for="(ballPosition, index) in props.positions" :key="index" class="ball" :style="{
         left: `${ballPosition.x}px`,
         top: `${ballPosition.y}px`,
@@ -257,6 +302,49 @@ function handlePointerDown(event) {
     fill: none;
     stroke: none;
     pointer-events: stroke;
+}
+
+.pin-progress {
+    overflow: visible;
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.pin-progress-track,
+.pin-progress-ring {
+    fill: none;
+    filter: drop-shadow(0 0 1rem var(--shadow));
+}
+
+.pin-progress-track {
+    stroke: transparent;
+    stroke-width: 0.5rem;
+}
+
+.pin-progress-ring {
+    stroke: var(--white);
+    stroke-linecap: round;
+    stroke-width: 0.5rem;
+}
+
+.pin-progress-ring.pinned {
+    stroke: var(--primary);
+    animation: pin-fade 2s ease-out forwards;
+}
+
+@keyframes pin-fade {
+    80% {
+        stroke: var(--primary);
+        filter: drop-shadow(0 0 1rem var(--shadow));
+    }
+
+    100% {
+        stroke: transparent;
+        filter: drop-shadow(0 0 0 var(--shadow));
+    }
 }
 
 .blob-area.grabbing {

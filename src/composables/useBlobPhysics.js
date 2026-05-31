@@ -18,6 +18,8 @@ const IDLE_NUDGE_BLEND = 0.8;
 const SLEEP_UPDATE_INTERVAL_MS = 33;
 const SLEEP_TIME_SCALE = 0.2;
 const PERSIST_INTERVAL_MS = 500;
+const PIN_HOLD_DELAY_MS = 500;
+const PIN_PROGRESS_DURATION_MS = 500;
 
 const randomBetween = (min, max) => min + Math.random() * (max - min);
 const lerp = (start, end, t) => start + (end - start) * t;
@@ -29,6 +31,9 @@ import * as storage from '../utils/storage'
 export const useBlobPhysics = ({ ballRadii, blobScale, activity }) => {
     const positions = ref([]);
     const grabbing = ref(false);
+    const pinProgress = ref(0);
+    const pinAnchor = ref(null);
+    const isPinned = ref(false);
     const blobArea = ref(null);
     const blobEdge = ref(null);
     const blobState = useBlobState();
@@ -51,9 +56,15 @@ export const useBlobPhysics = ({ ballRadii, blobScale, activity }) => {
     let lastViewportBounds = { width: 1, height: 1 };
     let lastPersist = 0;
     let nextIdleNudgeAt = 0;
+    let activeIdleNudge = null;
     let lastDragMoveAt = 0;
     let interactionLocked = false;
     let lastSleepUpdateAt = 0;
+    let pinnedBody = null;
+    let pinHoldTimeoutId = null;
+    let pinHoldStartedAt = 0;
+    let pinHoldBody = null;
+    let pinHoldPosition = null;
     let blobSizeScale = Math.max(0.5, Number(blobScale?.value) || 1);
 
     const normalizeBlobScale = (value) => Math.max(0.5, Number(value) || 1);
@@ -106,6 +117,120 @@ export const useBlobPhysics = ({ ballRadii, blobScale, activity }) => {
         const center = getBallClusterCenter();
         if (!center) return;
         try { storage.writePosition(center); } catch { }
+    };
+
+    const getBodyIndex = (body) => ballBodies.indexOf(body);
+
+    const clearPinHoldTimeout = () => {
+        if (pinHoldTimeoutId) {
+            window.clearTimeout(pinHoldTimeoutId);
+            pinHoldTimeoutId = null;
+        }
+
+        pinHoldStartedAt = 0;
+        pinHoldBody = null;
+        pinHoldPosition = null;
+
+        if (!pinnedBody) {
+            pinProgress.value = 0;
+            pinAnchor.value = null;
+        }
+    };
+
+    const clearPinnedBody = () => {
+        if (!pinnedBody) {
+            return;
+        }
+
+        Body.setStatic(pinnedBody, false);
+        pinnedBody = null;
+        isPinned.value = false;
+        pinProgress.value = 0;
+        pinAnchor.value = null;
+    };
+
+    const beginPinHold = () => {
+        if (!grabbing.value || !activeBody) {
+            return;
+        }
+
+        if (activeBody === pinnedBody) {
+            isPinned.value = true;
+            pinAnchor.value = {
+                x: activeBody.position.x,
+                y: activeBody.position.y,
+                radius: activeBody.circleRadius,
+            };
+            pinProgress.value = 1;
+            return;
+        }
+
+        const nextPosition = {
+            x: Math.round(activeBody.position.x),
+            y: Math.round(activeBody.position.y),
+        };
+
+        if (pinHoldBody === activeBody) {
+            const movedDistance = pinHoldPosition
+                ? Math.hypot(nextPosition.x - pinHoldPosition.x, nextPosition.y - pinHoldPosition.y)
+                : 0;
+
+            if (pinHoldStartedAt > 0) {
+                if (movedDistance <= 4) {
+                    return;
+                }
+
+                clearPinHoldTimeout();
+            } else if (pinHoldTimeoutId && movedDistance <= 4) {
+                return;
+            } else if (pinHoldTimeoutId) {
+                clearPinHoldTimeout();
+            }
+        }
+
+        if (pinHoldStartedAt > 0 && pinHoldBody === activeBody) {
+            return;
+        }
+
+        clearPinHoldTimeout();
+
+        pinHoldBody = activeBody;
+        pinHoldPosition = nextPosition;
+        pinHoldTimeoutId = window.setTimeout(() => {
+            pinHoldTimeoutId = null;
+
+            if (!grabbing.value || activeBody !== pinHoldBody || pinnedBody) {
+                return;
+            }
+
+            pinHoldStartedAt = Date.now();
+            pinProgress.value = 0;
+            pinAnchor.value = {
+                x: pinHoldBody.position.x,
+                y: pinHoldBody.position.y,
+                radius: pinHoldBody.circleRadius,
+            };
+        }, PIN_HOLD_DELAY_MS);
+    };
+
+    const pinActiveBody = () => {
+        if (!activeBody || pinnedBody === activeBody) {
+            return;
+        }
+
+        pinnedBody = activeBody;
+        Body.setStatic(pinnedBody, true);
+        Body.setVelocity(pinnedBody, { x: 0, y: 0 });
+        Body.setAngularVelocity(pinnedBody, 0);
+        isPinned.value = true;
+        pinProgress.value = 1;
+        pinAnchor.value = {
+            x: pinnedBody.position.x,
+            y: pinnedBody.position.y,
+            radius: pinnedBody.circleRadius,
+        };
+        pinHoldStartedAt = 0;
+        pinHoldBody = null;
     };
 
     const getSavedCenter = () => {
@@ -374,8 +499,12 @@ export const useBlobPhysics = ({ ballRadii, blobScale, activity }) => {
             return;
         }
 
+        clearPinHoldTimeout();
+
         if (activeBody) {
-            Body.setStatic(activeBody, false);
+            if (activeBody !== pinnedBody) {
+                Body.setStatic(activeBody, false);
+            }
         }
         activeBody = null;
         grabbing.value = false;
@@ -556,6 +685,21 @@ export const useBlobPhysics = ({ ballRadii, blobScale, activity }) => {
         nextIdleNudgeAt = now + delayMs;
     };
 
+    const startIdleNudge = (now = Date.now()) => {
+        const activityLevel = activity.value;
+        const minVelocity = lerp(BASE_NUDGE_VELOCITY, BASE_NUDGE_VELOCITY * 3, activityLevel);
+        const maxVelocity = lerp(BASE_NUDGE_VELOCITY * 2, BASE_NUDGE_VELOCITY * 5, activityLevel);
+
+        activeIdleNudge = {
+            startedAt: now,
+            endsAt: now + 500,
+            direction: getIdleNudgeDirection(),
+            strength: randomBetween(minVelocity, maxVelocity),
+        };
+
+        scheduleNextNudge(now);
+    };
+
     const getIdleNudgeDirection = () => {
         const center = getBallClusterCenter();
         if (!center) {
@@ -619,6 +763,7 @@ export const useBlobPhysics = ({ ballRadii, blobScale, activity }) => {
 
     const applyIdleMovement = (now = Date.now()) => {
         if (blobState.getState() !== STATES.IDLE || ballBodies.length === 0) {
+            activeIdleNudge = null;
             return;
         }
 
@@ -627,15 +772,22 @@ export const useBlobPhysics = ({ ballRadii, blobScale, activity }) => {
             return;
         }
 
-        if (now < nextIdleNudgeAt) {
+        if (didDragRecently()) {
             return;
         }
 
-        const activityLevel = activity.value;
-        const direction = getIdleNudgeDirection();
-        const minVelocity = lerp(BASE_NUDGE_VELOCITY, BASE_NUDGE_VELOCITY * 3, activityLevel);
-        const maxVelocity = lerp(BASE_NUDGE_VELOCITY * 2, BASE_NUDGE_VELOCITY * 5, activityLevel);
-        const velocityBoost = randomBetween(minVelocity, maxVelocity) * direction;
+        if (!activeIdleNudge && now >= nextIdleNudgeAt) {
+            startIdleNudge(now);
+        }
+
+        if (!activeIdleNudge) {
+            return;
+        }
+
+        const duration = Math.max(1, activeIdleNudge.endsAt - activeIdleNudge.startedAt);
+        const progress = Math.max(0, Math.min(1, (now - activeIdleNudge.startedAt) / duration));
+        const easing = Math.sin(progress * Math.PI);
+        const velocityBoost = activeIdleNudge.direction * activeIdleNudge.strength * 0.05 * easing;
 
         ballBodies.forEach((body) => {
             if (body.isStatic) {
@@ -643,12 +795,14 @@ export const useBlobPhysics = ({ ballRadii, blobScale, activity }) => {
             }
 
             Body.setVelocity(body, {
-                x: lerp(body.velocity.x, body.velocity.x + velocityBoost, IDLE_NUDGE_BLEND),
+                x: body.velocity.x + velocityBoost,
                 y: body.velocity.y,
             });
         });
 
-        scheduleNextNudge(now);
+        if (progress >= 1) {
+            activeIdleNudge = null;
+        }
     };
 
     const updateDragPosition = (event) => {
@@ -666,6 +820,7 @@ export const useBlobPhysics = ({ ballRadii, blobScale, activity }) => {
         separateOverlappingBalls();
         syncBallPositions();
         checkConvexAngle();
+        beginPinHold();
     };
 
     const findClosestBall = (x, y) => {
@@ -694,6 +849,10 @@ export const useBlobPhysics = ({ ballRadii, blobScale, activity }) => {
         const closestBody = findClosestBall(event.clientX, event.clientY);
         if (event.button !== 0 || !closestBody) {
             return;
+        }
+
+        if (pinnedBody) {
+            clearPinnedBody();
         }
 
         activeBody = closestBody;
@@ -853,6 +1012,15 @@ export const useBlobPhysics = ({ ballRadii, blobScale, activity }) => {
         updateState(now);
         applyIdleMovement(now);
         updateHoverBallScale();
+        if (grabbing.value && pinHoldStartedAt > 0 && !pinnedBody) {
+            const elapsedMs = now - pinHoldStartedAt;
+            const progress = Math.max(0, Math.min(1, elapsedMs / PIN_PROGRESS_DURATION_MS));
+            pinProgress.value = progress;
+
+            if (progress >= 1) {
+                pinActiveBody();
+            }
+        }
         separateOverlappingBalls();
         clampBallVelocities();
         syncBallPositions();
@@ -978,6 +1146,8 @@ export const useBlobPhysics = ({ ballRadii, blobScale, activity }) => {
         mousePosition = { x: 0, y: 0 };
         lastDragMoveAt = 0;
         interactionLocked = false;
+        clearPinHoldTimeout();
+        clearPinnedBody();
         ballScaleFactors = [];
         ballBodies = [];
         chainConstraints = [];
@@ -998,5 +1168,8 @@ export const useBlobPhysics = ({ ballRadii, blobScale, activity }) => {
         didDragRecently,
         setInteractionLocked,
         jump,
+        pinProgress,
+        pinAnchor,
+        isPinned,
     };
 };

@@ -105,6 +105,9 @@ const {
     didDragRecently,
     setInteractionLocked,
     jump,
+    pinProgress,
+    pinAnchor,
+    isPinned,
 } = useBlobPhysics({
     ballRadii,
     blobScale,
@@ -882,8 +885,10 @@ const quitApplication = () => {
 
 const submitJournal = async (entryOptions = {}) => {
     try {
+        let protectedAlready = true;
+
         if (entryOptions?.isSecret) {
-            const protectedAlready = await isPinProtected();
+            protectedAlready = await isPinProtected();
             if (!protectedAlready) {
                 pendingEntryOptions.value = entryOptions;
                 showPINModal.value = true;
@@ -898,6 +903,10 @@ const submitJournal = async (entryOptions = {}) => {
         const savedEntry = await saveEntry(entryOptions);
         if (!savedEntry) {
             return;
+        }
+
+        if (entryOptions?.isSecret && !protectedAlready) {
+            await journal.loadEntries();
         }
 
         latestSubmittedEmotion.value = savedEntry.emotion || DEFAULT_FACE_EMOTION;
@@ -924,14 +933,20 @@ const handleDeleteEntry = async (entryId) => {
     }
 };
 
-const handlePINComplete = async () => {
+const handlePINSetupComplete = async () => {
     showPINModal.value = false;
-    // resolve any pending submit waiting for PIN setup
+
     if (_passwordSetupResolve.ref) {
         _passwordSetupResolve.ref(true);
         _passwordSetupResolve.ref = null;
     }
+
     _passwordSetupReject.ref = null;
+};
+
+const handlePINUnlockComplete = async () => {
+    showPINModal.value = false;
+    await journal.loadEntries();
 };
 
 const handlePINCancel = async () => {
@@ -1110,8 +1125,8 @@ onBeforeUnmount(() => {
             :face-eyes-style="{ transform: `translateY(-175%) translate(${eyesOffset.x}px, ${eyesOffset.y}px)`, transition: 'transform 0.3s ease' }"
             :outline-points="outlinePoints" :positions="positions" :blob-area-ref="setBlobAreaRef"
             :blob-edge-ref="setBlobEdgeRef" :emotion="visualEmotion" :is-active="menuOpen || journalOpen || secMenuOpen"
-            :blob-scale="blobScale" @start-drag="startDrag" @open-menu="openMenu" @open-sec-menu="openSecMenu"
-            :state="blobState.state.value" />
+            :blob-scale="blobScale" :pin-progress="pinProgress" :pin-anchor="pinAnchor" :is-pinned="isPinned"
+            @start-drag="startDrag" @open-menu="openMenu" @open-sec-menu="openSecMenu" :state="blobState.state.value" />
 
         <Transition name="sleep-tag" @after-leave="onSleepTagAfterLeave">
             <button v-if="blobState.state.value === STATES.SLEEPING && !sleepTagHidden && sleepTagMounted"
@@ -1149,7 +1164,8 @@ onBeforeUnmount(() => {
             @delete-entry="handleDeleteEntry" />
 
         <Transition name="overlay-fade" appear>
-            <PINWindow v-if="showPINModal" @password-set="handlePINComplete" @password-unlocked="handlePINComplete"
+            <PINWindow v-if="showPINModal" @password-set="handlePINSetupComplete"
+                @password-unlocked="handlePINUnlockComplete"
                 @cancel="handlePINCancel" />
         </Transition>
 

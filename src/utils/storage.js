@@ -5,6 +5,7 @@ const POSITION_KEY = 'amorphous-blob:blob-center'
 const SLEEP_STATE_KEY = 'amorphous-blob:sleep-state'
 const SLEEP_DRAFT_KEY = 'amorphous-blob:sleep-setup-draft'
 const SLEEP_PREFERENCE_KEY = 'amorphous-blob:sleep-setup-preference'
+const JOURNAL_LIST_VISIBLE_KEY = 'amorphous-blob:journal-list-visible'
 
 const safeParse = (raw) => {
     try {
@@ -155,6 +156,24 @@ export const clearSleepState = () => {
     } catch { }
 }
 
+export const readJournalListVisible = () => {
+    const raw = window.localStorage.getItem(JOURNAL_LIST_VISIBLE_KEY)
+    if (raw === null) return true
+
+    const parsed = safeParse(raw)
+    if (parsed === null) return true
+
+    return parsed !== false
+}
+
+export const writeJournalListVisible = (isVisible) => {
+    try {
+        window.localStorage.setItem(JOURNAL_LIST_VISIBLE_KEY, JSON.stringify(Boolean(isVisible)))
+    } catch {
+        // ignore
+    }
+}
+
 export default {
     readSettings,
     writeSettings,
@@ -167,4 +186,6 @@ export default {
     readSleepState,
     writeSleepState,
     clearSleepState,
+    readJournalListVisible,
+    writeJournalListVisible,
 }

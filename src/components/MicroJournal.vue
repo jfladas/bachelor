@@ -2,6 +2,7 @@
 import { ref, watch, computed, nextTick } from "vue";
 import Button from "./ui/Button.vue";
 import JournalList from "./JournalList.vue";
+import * as storage from "../utils/storage";
 
 const props = defineProps({
     visible: {
@@ -72,7 +73,7 @@ const emit = defineEmits([
 ]);
 
 const isSecretEntry = ref(false);
-const showJournalList = ref(true);
+const showJournalList = ref(storage.readJournalListVisible());
 const windowEl = ref(null);
 const windowHeight = ref(0);
 
@@ -111,6 +112,7 @@ const toggleSecretEntry = () => {
 
 const toggleJournalList = () => {
     showJournalList.value = !showJournalList.value;
+    storage.writeJournalListVisible(showJournalList.value);
 };
 
 const handleSubmit = () => {
@@ -128,7 +130,7 @@ watch(
         if (!isVisible) {
             return;
         }
-        showJournalList.value = true;
+        showJournalList.value = storage.readJournalListVisible();
 
         await nextTick();
 

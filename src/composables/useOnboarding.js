@@ -139,11 +139,14 @@ export const useOnboarding = () => {
         hueOverride: hueOverride.value,
     });
 
-    const handleOnboardingStateChanged = (_, state) => {
-        onboardingCompleted.value = state.completed;
+    const handleOnboardingStateChanged = (eventOrState, maybeState) => {
+        const state = maybeState ?? eventOrState ?? {};
+        const completed = Boolean(state.completed);
+
+        onboardingCompleted.value = completed;
         applyStateData(state.data);
-        try { ipc.send('set-ignore-mouse-events', !state.completed); } catch { }
-        if (!state.completed) {
+        try { ipc.send('set-ignore-mouse-events', !completed); } catch { }
+        if (!completed) {
             onboardingStep.value = 1;
         }
     };

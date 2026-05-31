@@ -444,7 +444,7 @@ function registerIpcHandlers() {
         // Repair metadata for old entries (mark .enc files as secret)
         storageService.repairMetadata();
 
-        setJournalUnlocked(true);
+        setJournalUnlocked(false);
 
         return { success: true, passwordSet: true };
     });
@@ -480,7 +480,6 @@ function registerIpcHandlers() {
         }
 
         encryptionKey = derivedKey;
-        setJournalUnlocked(true);
 
         storageService.repairMetadata();
 
@@ -516,6 +515,8 @@ function registerIpcHandlers() {
                 console.error('Failed to re-encrypt locked secret entry:', metaEntry.id, error);
             }
         }
+
+        setJournalUnlocked(true);
 
         return { success: true };
     });
