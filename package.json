@@ -2,6 +2,8 @@
   "name": "amorphous-blob",
   "private": true,
   "version": "1.0.0",
+  "description": "Desktop presence app built with Vue, Vite, Electron, and Matter.js.",
+  "author": "jfladas",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run vue\" \"npm run electron\"",
@@ -27,6 +29,7 @@
   "main": "electron/main.cjs",
   "build": {
     "appId": "com.yourname.amorphous-blob",
+    "copyright": "Copyright 2026 jfladas",
     "productName": "Amorphous Blob",
     "directories": {
       "buildResources": "public",
@@ -35,13 +38,11 @@
     "files": [
       "dist/**",
       "electron/**",
-      "node_modules/**",
       "package.json"
     ],
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        "nsis"
       ],
       "icon": "electron/assets/icon.ico"
     },
