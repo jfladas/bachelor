@@ -295,7 +295,7 @@ export const useMicroJournal = () => {
 
             const nextEntries = [entry, ...entries.value].slice(0, MAX_STORED_ENTRIES);
             entries.value = nextEntries;
-            resetDraft({ rotatePromptAfterReset: true, preserveEmotion: true });
+            resetDraft({ rotatePromptAfterReset: true });
             isSecret.value = false;
 
             return entry;

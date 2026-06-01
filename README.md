@@ -2,6 +2,8 @@
 
 _Bachelor 2026_
 
+### [Download for Windows or MacOS](https://www.jfladas.com/projects/bachelor)
+
 Desktop presence built with Vue, Vite, Electron, and Matter.js.
 
 ## The Experience
