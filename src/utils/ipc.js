@@ -1,6 +1,23 @@
-import { getElectronIPC } from './electronHelper'
-
 let cached = null
+
+export async function getElectronIPC(timeout = 5000) {
+    const startTime = Date.now()
+
+    return new Promise((resolve) => {
+        const checkInterval = setInterval(() => {
+            if (window.electron?.ipcRenderer) {
+                clearInterval(checkInterval)
+                resolve(window.electron.ipcRenderer)
+                return
+            }
+
+            if (Date.now() - startTime > timeout) {
+                clearInterval(checkInterval)
+                resolve(null)
+            }
+        }, 50)
+    })
+}
 
 export async function ipc() {
     if (cached) return cached

@@ -13,7 +13,7 @@ This document describes the app from a user-facing perspective and is strictly l
   - The selected values are persisted to an onboarding state file and used to style the blob visuals and affect its behaviour.
 
 - **Create a micro-journal entry**
-  - The Micro Journal panel (`src/components/MicroJournal.vue`) accepts short text, an emotion tag, and prompts for inspiration.
+  - The Micro Journal panel (`src/components/MicroJournal.vue`) accepts short text, an emotion tag, and inspiration.
   - Submitting saves the entry via Electron IPC to the local journal storage and triggers a small blob response animation.
 
 - **View and browse entries**

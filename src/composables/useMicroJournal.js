@@ -1,6 +1,6 @@
 import { computed, ref } from "vue";
 import { journalEmotions, journalPromptsGeneric, journalPromptsByEmotion } from "../constants/microJournalOptions";
-import { getElectronIPC } from "../utils/electronHelper";
+import { getElectronIPC } from "../utils/ipc";
 
 const MAX_ENTRY_LENGTH = 600;
 const MAX_STORED_ENTRIES = 80;
@@ -51,6 +51,7 @@ const mergeLoadedEntries = (metadataList, loadedEntries) => {
                 text: loadedEntry.text || "",
                 emotion: loadedEntry.emotion ?? metadataEntry.emotion ?? null,
                 prompt: loadedEntry.prompt ?? metadataEntry.prompt ?? null,
+                emotionExpiresAt: loadedEntry.emotionExpiresAt ?? metadataEntry.emotionExpiresAt ?? null,
                 isSecret,
                 isLocked: isSecret && !isUnlocked,
             };
@@ -220,8 +221,13 @@ export const useMicroJournal = () => {
             return;
         }
 
+        // Toggle the selected emotion. If there's already text in the entry
+        // field, do not rotate the inspiration (prompt) when changing emotion.
         selectedEmotion.value = selectedEmotion.value === emotionId ? "" : emotionId;
-        promptIndex.value = getInitialPromptIndex();
+        const hasText = sanitizeEntryText(journalText.value).length > 0;
+        if (!hasText) {
+            promptIndex.value = getInitialPromptIndex();
+        }
     };
 
     const rotatePrompt = () => {
@@ -250,7 +256,7 @@ export const useMicroJournal = () => {
     };
 
 
-    const saveEntry = async ({ includeEmotion = true, includePrompt = true, includeText = true, isSecret: nextIsSecret = false } = {}) => {
+    const saveEntry = async ({ includeEmotion = true, includePrompt = true, includeText = true, isSecret: nextIsSecret = false, emotionExpiresAt = null } = {}) => {
         const text = includeText ? sanitizeEntryText(journalText.value) : "";
         const hasText = text.length > 0;
         const hasEmotion = includeEmotion && Boolean(selectedEmotion.value);
@@ -278,6 +284,7 @@ export const useMicroJournal = () => {
                 isSecret: entryIsSecret,
                 isLocked: entryIsSecret && !journalUnlocked,
                 createdAt: new Date().toISOString(),
+                emotionExpiresAt: includeEmotion ? emotionExpiresAt : null,
             };
 
             const result = await ipc.invoke('journal:save-entry', entry);

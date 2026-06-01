@@ -52,7 +52,6 @@ const sortedEntries = computed(() => {
 
 const entriesByMonth = computed(() => {
     const grouped = {}
-    const currentYear = new Date().getFullYear()
 
     sortedEntries.value.forEach((entry) => {
         const date = new Date(entry.createdAt)
@@ -433,7 +432,7 @@ const getEntryText = (entry) => {
     margin: 1rem 0.5rem 0.25rem 0.5rem;
     text-transform: capitalize;
     user-select: none;
-    z-index: 5;
+    z-index: 25;
     transition: all 0.2s ease;
 }
 </style>

@@ -1,7 +1,5 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-console.log("preload.js is loaded");
-
 // With contextIsolation: true (recommended), use contextBridge
 // With contextIsolation: false (current), we can access ipcRenderer directly
 try {
@@ -34,5 +32,3 @@ try {
         },
     };
 }
-
-console.log("electron object exposed to renderer process");

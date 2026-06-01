@@ -1,8 +1,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { reactionOptions, sliderOptions, traitOptions } from "../constants/onboardingOptions";
+import { sliderOptions, traitOptions } from "../constants/onboardingOptions";
 import { calculateAssignedProfile } from "../utils/colorProfile";
 import { createHueVariables } from "../utils/themeColors";
-import { clampHue, clampUnit, normalizeReaction, normalizeTraits } from "../utils/validation";
+import { clampHue, clampUnit, normalizeTraits } from "../utils/validation";
 import * as ipc from "../utils/ipc";
 
 const TOTAL_ONBOARDING_STEPS = 3;
@@ -30,24 +30,18 @@ const createDefaultOnboardingData = () => ({
     hue: 220,
     assignedHue: 220,
     symmetry: 0.5,
-    variability: 0.5,
+    expressiveness: 0.5,
     activity: 0.5,
-    reaction: "sparkles",
 });
 
 const normalizeSelectedTraits = (traits) => normalizeTraits(traits, traitOptions, traitOptions.length);
-
-const normalizeSelectedReaction = (reaction, fallback = "sparkles", allowNumeric = true) => {
-    return normalizeReaction(reaction, reactionOptions, fallback, allowNumeric);
-};
 
 const normalizeOnboardingData = (data = {}) => ({
     hue: clampHue(data.hue, 220),
     assignedHue: clampHue(data.assignedHue ?? data.hue, 220),
     symmetry: clampUnit(data.symmetry, 0.5, 2),
-    variability: clampUnit(data.variability, 0.5, 2),
+    expressiveness: clampUnit(data.expressiveness, 0.5, 2),
     activity: clampUnit(data.activity, 0.5, 2),
-    reaction: normalizeSelectedReaction(data.reaction, "sparkles"),
 });
 
 export const useOnboarding = () => {
@@ -71,13 +65,8 @@ export const useOnboarding = () => {
 
         onboardingData.value.assignedHue = clampHue(calculated.assignedHue, onboardingData.value.hue);
         onboardingData.value.symmetry = clampUnit(calculated.symmetry, onboardingData.value.symmetry, 2);
-        onboardingData.value.variability = clampUnit(calculated.variability, onboardingData.value.variability, 2);
+        onboardingData.value.expressiveness = clampUnit(calculated.expressiveness, onboardingData.value.expressiveness, 2);
         onboardingData.value.activity = clampUnit(calculated.activity, onboardingData.value.activity, 2);
-        onboardingData.value.reaction = normalizeSelectedReaction(
-            calculated.reaction,
-            onboardingData.value.reaction,
-            false
-        );
 
         if (!hueOverride.value) {
             onboardingData.value.hue = onboardingData.value.assignedHue;
@@ -128,9 +117,8 @@ export const useOnboarding = () => {
         hue: onboardingData.value.hue,
         assignedHue: onboardingData.value.assignedHue,
         symmetry: onboardingData.value.symmetry,
-        variability: onboardingData.value.variability,
+        expressiveness: onboardingData.value.expressiveness,
         activity: onboardingData.value.activity,
-        reaction: onboardingData.value.reaction,
         traits: [...selectedTraits.value],
         questionAnswers: sliderOptions.reduce((answers, sliderOption) => {
             answers[sliderOption.key] = questionAnswers.value[sliderOption.key];

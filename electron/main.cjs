@@ -19,6 +19,10 @@ let isUnlocked = false;
 let storageService = null;
 
 function getStartOnLoginEnabled() {
+    if (isDev) {
+        return false;
+    }
+
     try {
         return app.getLoginItemSettings().openAtLogin === true;
     } catch (error) {
@@ -29,6 +33,10 @@ function getStartOnLoginEnabled() {
 
 function setStartOnLoginEnabled(enabled) {
     const nextEnabled = Boolean(enabled);
+
+    if (isDev) {
+        return false;
+    }
 
     try {
         if (process.platform === 'darwin') {
@@ -75,9 +83,8 @@ const onboardingDefaults = {
         hue: 220,
         assignedHue: 220,
         symmetry: 0.5,
-        variability: 0.5,
+        expressiveness: 0.5,
         activity: 0.5,
-        reaction: 'sparkles',
         traits: [],
         questionAnswers: {
             reservedOpen: 0.5,
@@ -88,33 +95,25 @@ const onboardingDefaults = {
     },
 };
 
-function sanitizeOnboardingData(data) {
-    const clampHue = (value, fallback = 220) => {
-        const numeric = Number(value);
-        if (!Number.isFinite(numeric)) {
-            return fallback;
-        }
-
-        return ((Math.round(numeric) % 360) + 360) % 360;
-    };
-
-    const clampUnit = (value, fallback = 0.5) => {
-        const numeric = Number(value);
-        if (!Number.isFinite(numeric)) {
-            return fallback;
-        }
-
-        return Math.min(1, Math.max(0, Number(numeric.toFixed(2))));
-    };
-
-    const normalizeReaction = (value, fallback = 'sparkles') => {
-        const allowedReactions = ['sparkles', 'flowers', 'hearts'];
-        if (typeof value === 'string' && allowedReactions.includes(value)) {
-            return value;
-        }
-
+function clampHue(value, fallback = 220) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
         return fallback;
-    };
+    }
+
+    return ((Math.round(numeric) % 360) + 360) % 360;
+}
+
+function clampUnit(value, fallback = 0.5) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+        return fallback;
+    }
+
+    return Math.min(1, Math.max(0, Number(numeric.toFixed(2))));
+}
+
+function sanitizeOnboardingData(data) {
 
     const allowedTraits = ['active', 'optimistic', 'gentle', 'chill', 'mysterious', 'cute', 'grounded', 'creative'];
     const traits = Array.isArray(data?.traits)
@@ -134,9 +133,8 @@ function sanitizeOnboardingData(data) {
         hue,
         assignedHue,
         symmetry: clampUnit(data?.symmetry, 0.5),
-        variability: clampUnit(data?.variability ?? data?.randomness, 0.5),
-        activity: clampUnit(data?.activity ?? data?.speed, 0.5),
-        reaction: normalizeReaction(data?.reaction, 'sparkles'),
+        expressiveness: clampUnit(data?.expressiveness, 0.5),
+        activity: clampUnit(data?.activity, 0.5),
         traits: Array.from(new Set(traits)).slice(0, allowedTraits.length),
         questionAnswers,
         hueOverride: Boolean(data?.hueOverride ?? (hue !== assignedHue)),
@@ -411,7 +409,7 @@ function registerIpcHandlers() {
         const nextState = {
             completed: true,
             completedAt: previous.completedAt || new Date().toISOString(),
-            data: sanitizeOnboardingData(previous.data || {}),
+            data: previous.data,
         };
 
         writeOnboardingState(nextState);
@@ -533,6 +531,7 @@ function registerIpcHandlers() {
             text: entry.text,
             emotion: entry.emotion,
             prompt: entry.prompt,
+            emotionExpiresAt: entry.emotionExpiresAt ?? null,
         };
 
         const entryWithMetadata = {
@@ -542,6 +541,7 @@ function registerIpcHandlers() {
                 emotion: entry.emotion,
                 hasText: Boolean(entry.text),
                 isSecret: entry.isSecret,
+                emotionExpiresAt: entry.emotionExpiresAt ?? null,
             },
         };
 

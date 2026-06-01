@@ -9,7 +9,6 @@ const OVERLAP_PASSES = 3;
 const MAX_BALL_SPEED = 50;
 const CONVEX_ANGLE = 60;
 const PETTING_SCALE = 0.7;
-const PETTING_LERP = 0.03;
 const CENTER_LERP_MIN = 0.1;
 const CENTER_LERP_MAX = 0.7;
 const BASE_NUDGE_INTERVAL_MS = 1500;
@@ -446,7 +445,7 @@ export const useBlobPhysics = ({ ballRadii, blobScale, activity }) => {
             const body = ballBodies[i];
             const currentScale = ballScaleFactors[i] || 1;
             const targetScale = hoverActive && i === closestIndex ? PETTING_SCALE : 1;
-            const nextScale = currentScale + (targetScale - currentScale) * PETTING_LERP;
+            const nextScale = currentScale + (targetScale - currentScale) * 0.03;
 
             if (Math.abs(nextScale - currentScale) < 0.0001) {
                 continue;

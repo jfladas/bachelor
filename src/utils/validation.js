@@ -33,43 +33,20 @@ export const normalizeTraits = (traits, allowedTraits = [], maxCount = 6) => {
     return uniqueTraits.length > 0 ? uniqueTraits.slice(0, maxCount) : [];
 };
 
-export const normalizeReaction = (
-    reaction,
-    allowedReactions = [],
-    fallback = allowedReactions[0] ?? "sparkles",
-    allowNumeric = true
-) => {
-    if (typeof reaction === "string" && allowedReactions.includes(reaction)) {
-        return reaction;
-    }
-
-    if (allowNumeric && typeof reaction === "number" && Number.isFinite(reaction) && allowedReactions.length > 0) {
-        const index = Math.min(
-            allowedReactions.length - 1,
-            Math.max(0, Math.round(reaction * (allowedReactions.length - 1)))
-        );
-        return allowedReactions[index];
-    }
-
-    return fallback;
-};
-
 export const clampPercent = (value, min = 50, max = 150) => {
     const n = Number(value);
-    if (!Number.isFinite(n)) return 100;
+    if (!Number.isFinite(n)) {
+        return 100;
+    }
+
     return Math.min(max, Math.max(min, Math.round(n)));
 };
 
 export const clampSleepAmount = (value, min = 1, max = 999) => {
     const n = Number(value);
-    if (!Number.isFinite(n) || n < min) return null;
+    if (!Number.isFinite(n) || n < min) {
+        return null;
+    }
+
     return Math.min(max, Math.max(min, Math.round(n)));
-};
-
-export const normalizeSleepUnit = (unit) => (unit === 'minutes' || unit === 'until-woken-up' ? unit : 'hours');
-
-export const clampRatio = (value, min = 0.02, max = 0.98) => {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return 0.5;
-    return Math.min(max, Math.max(min, n));
 };

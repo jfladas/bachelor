@@ -23,6 +23,7 @@ export const readSettings = () => {
 
     return {
         blobSize: typeof parsed.blobSize === 'number' ? Math.min(150, Math.max(50, Math.round(parsed.blobSize))) : undefined,
+        useAssignedHueEverywhere: parsed.useAssignedHueEverywhere === true,
         sleepTagVisible: parsed.sleepTagVisible !== false,
         startOnSystemRestart: parsed.startOnSystemRestart !== false,
     }
@@ -32,6 +33,7 @@ export const writeSettings = (settings = {}) => {
     try {
         const payload = {
             blobSize: typeof settings.blobSize === 'number' ? Math.min(150, Math.max(50, Math.round(settings.blobSize))) : undefined,
+            useAssignedHueEverywhere: settings.useAssignedHueEverywhere === true,
             sleepTagVisible: settings.sleepTagVisible !== false,
             startOnSystemRestart: settings.startOnSystemRestart !== false,
             savedAt: Date.now(),

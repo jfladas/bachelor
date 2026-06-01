@@ -23,9 +23,9 @@ const props = defineProps({
             hue: 220,
             assignedHue: 220,
             symmetry: 0.5,
-            variability: 0.5,
+            expressiveness: 0.5,
             activity: 0.5,
-            reaction: "sparkles",
+            traits: [],
         }),
     },
 });
@@ -38,16 +38,20 @@ const EDGE_WIDTH = 20;
 // storage helper handles keys
 const SLEEP_TAG_MIN_RATIO = 0.02;
 const SLEEP_TAG_MAX_RATIO = 0.98;
+const POSITIVE_EMOTIONS = new Set(["excited", "content"]);
+const EMOTION_LIFETIME_MIN_HOURS = 1;
+const EMOTION_LIFETIME_MAX_HOURS = 24;
 
-// use shared clampPercent from validation
-
-const hue = computed(() => {
-    return clampHue(props.onboardingData?.hue, 220);
-});
+const baseHue = computed(() => clampHue(props.onboardingData?.hue, 220));
+const assignedHue = computed(() => clampHue(props.onboardingData?.assignedHue ?? baseHue.value, baseHue.value));
+const useAssignedHueEverywhere = computed(() => Boolean(appSettings.value.useAssignedHueEverywhere));
+const hue = computed(() => (useAssignedHueEverywhere.value ? assignedHue.value : baseHue.value));
+const hasAssignedHueDifference = computed(() => baseHue.value !== assignedHue.value);
 
 const symmetry = computed(() => clampUnit(props.onboardingData?.symmetry, 0.5));
-const variability = computed(() => clampUnit(props.onboardingData?.variability, 0.5));
+const expressiveness = computed(() => clampUnit(props.onboardingData?.expressiveness, 0.5));
 const activity = computed(() => clampUnit(props.onboardingData?.activity, 0.5));
+const hasOptimisticTrait = computed(() => Array.isArray(props.onboardingData?.traits) && props.onboardingData.traits.includes("optimistic"));
 
 const ballRadii = computed(() => {
     const centerIndex = (BALL_COUNT - 1) / 2;
@@ -77,12 +81,14 @@ const shellStyle = computed(() => ({
 
 const createDefaultAppSettings = () => ({
     blobSize: 100,
+    useAssignedHueEverywhere: false,
     sleepTagVisible: true,
     startOnSystemRestart: true,
 });
 
 const normalizeAppSettings = (settings = {}) => ({
     blobSize: clampPercent(settings?.blobSize ?? settings?.blobScale ?? 100),
+    useAssignedHueEverywhere: settings?.useAssignedHueEverywhere === true,
     sleepTagVisible: settings?.sleepTagVisible !== false,
     startOnSystemRestart: settings?.startOnSystemRestart !== false,
 });
@@ -91,6 +97,7 @@ const appSettings = ref(createDefaultAppSettings());
 const settingsLoaded = ref(false);
 const showSettingsModal = ref(false);
 const blobScale = computed(() => appSettings.value.blobSize / 100);
+const emotionRefreshTimerId = ref(null);
 
 const {
     positions,
@@ -136,7 +143,6 @@ const {
 } = journal;
 
 const DEFAULT_FACE_EMOTION = "default";
-const latestSubmittedEmotion = ref(DEFAULT_FACE_EMOTION);
 const visualEmotion = ref(DEFAULT_FACE_EMOTION);
 
 const applyFaceEmotion = (emotionId) => {
@@ -145,8 +151,101 @@ const applyFaceEmotion = (emotionId) => {
     setFace(nextEmotion);
 };
 
-const resolveLatestSubmittedEmotion = () => {
-    return entries.value[0]?.emotion || DEFAULT_FACE_EMOTION;
+const clearEmotionRefreshTimer = () => {
+    if (emotionRefreshTimerId.value) {
+        window.clearTimeout(emotionRefreshTimerId.value);
+        emotionRefreshTimerId.value = null;
+    }
+};
+
+const getEmotionDurationMs = (emotionId) => {
+    if (!emotionId) {
+        return null;
+    }
+
+    if (expressiveness.value >= 1) {
+        return Infinity;
+    }
+
+    const baseHours = EMOTION_LIFETIME_MIN_HOURS + ((EMOTION_LIFETIME_MAX_HOURS - EMOTION_LIFETIME_MIN_HOURS) * expressiveness.value);
+    const optimisticBonus = hasOptimisticTrait.value && POSITIVE_EMOTIONS.has(emotionId) ? 1.5 : 1;
+
+    return baseHours * optimisticBonus * 60 * 60 * 1000;
+};
+
+const getEntryEmotionExpiresAt = (entry) => {
+    if (!entry?.emotion) {
+        return null;
+    }
+
+    if (entry.emotionExpiresAt === null) {
+        return null;
+    }
+
+    const storedExpiresAt = Number(entry.emotionExpiresAt);
+    if (Number.isFinite(storedExpiresAt)) {
+        return storedExpiresAt;
+    }
+
+    const createdAt = Date.parse(entry.createdAt);
+    if (!Number.isFinite(createdAt)) {
+        return null;
+    }
+
+    const durationMs = getEmotionDurationMs(entry.emotion);
+    if (!Number.isFinite(durationMs)) {
+        return null;
+    }
+
+    return createdAt + durationMs;
+};
+
+const resolveActiveEntryEmotion = (now = Date.now()) => {
+    for (const entry of entries.value) {
+        if (!entry?.emotion) {
+            continue;
+        }
+
+        const expiresAt = getEntryEmotionExpiresAt(entry);
+        if (expiresAt === null || expiresAt > now) {
+            return {
+                emotion: entry.emotion,
+                expiresAt,
+            };
+        }
+    }
+
+    return {
+        emotion: DEFAULT_FACE_EMOTION,
+        expiresAt: null,
+    };
+};
+
+const resolveVisibleEmotion = (now = Date.now()) => {
+    if (journalOpen.value && selectedEmotion.value) {
+        return {
+            emotion: selectedEmotion.value,
+            expiresAt: null,
+        };
+    }
+
+    return resolveActiveEntryEmotion(now);
+};
+
+const syncVisualEmotion = () => {
+    const nextEmotion = resolveVisibleEmotion();
+    applyFaceEmotion(nextEmotion.emotion);
+
+    clearEmotionRefreshTimer();
+    if (nextEmotion.expiresAt === null || !Number.isFinite(nextEmotion.expiresAt)) {
+        return;
+    }
+
+    const delayMs = Math.max(0, nextEmotion.expiresAt - Date.now());
+    emotionRefreshTimerId.value = window.setTimeout(() => {
+        emotionRefreshTimerId.value = null;
+        syncVisualEmotion();
+    }, delayMs + 25);
 };
 
 const menuOpen = ref(false);
@@ -190,21 +289,6 @@ onMounted(() => {
 });
 
 const syncSleepDraft = (draft) => {
-    const amount = Math.min(999, Math.max(1, Math.round(Number(draft?.amount) || 1)));
-    const unit = draft?.unit === "minutes" || draft?.unit === "until-woken-up" ? draft.unit : "hours";
-    const rememberAsDefault = draft?.rememberAsDefault === true;
-
-    sleepSetupDraft.value = { amount, unit, rememberAsDefault };
-    storage.writeSleepDraft(sleepSetupDraft.value);
-    if (rememberAsDefault) {
-        storage.writeSleepPreference(sleepSetupDraft.value);
-        return;
-    }
-
-    try { storage.clearSleepPreference(); } catch { }
-};
-
-const syncSleepPreference = (draft) => {
     const amount = Math.min(999, Math.max(1, Math.round(Number(draft?.amount) || 1)));
     const unit = draft?.unit === "minutes" || draft?.unit === "until-woken-up" ? draft.unit : "hours";
     const rememberAsDefault = draft?.rememberAsDefault === true;
@@ -407,7 +491,7 @@ const closeMenu = ({ clearDraft = false } = {}) => {
     syncMenuState();
 
     if (wasJournalOpen) {
-        applyFaceEmotion(latestSubmittedEmotion.value);
+        syncVisualEmotion();
     }
 
     if (clearDraft) {
@@ -433,7 +517,7 @@ const restoreFaceEmotionAfterSleep = () => {
     clearSleepEmotionRestoreTimer();
     sleepEmotionRestoreTimerId.value = window.setTimeout(() => {
         sleepEmotionRestoreTimerId.value = null;
-        applyFaceEmotion(selectedEmotion.value || latestSubmittedEmotion.value || DEFAULT_FACE_EMOTION);
+        syncVisualEmotion();
     }, 3000);
 };
 
@@ -803,6 +887,10 @@ const updateBlobSizeSetting = (nextValue) => {
     syncAppSettings({ blobSize: clampPercent(nextValue) });
 };
 
+const updateUseAssignedHueEverywhereSetting = (nextValue) => {
+    syncAppSettings({ useAssignedHueEverywhere: Boolean(nextValue) });
+};
+
 const updateSleepAmountSetting = (nextValue) => {
     syncSleepDraft({
         amount: nextValue,
@@ -900,7 +988,19 @@ const submitJournal = async (entryOptions = {}) => {
             }
         }
 
-        const savedEntry = await saveEntry(entryOptions);
+        const emotionExpiresAt = selectedEmotion.value ? (() => {
+            const durationMs = getEmotionDurationMs(selectedEmotion.value);
+            if (!Number.isFinite(durationMs)) {
+                return null;
+            }
+
+            return Date.now() + durationMs;
+        })() : null;
+
+        const savedEntry = await saveEntry({
+            ...entryOptions,
+            emotionExpiresAt,
+        });
         if (!savedEntry) {
             return;
         }
@@ -909,8 +1009,7 @@ const submitJournal = async (entryOptions = {}) => {
             await journal.loadEntries();
         }
 
-        latestSubmittedEmotion.value = savedEntry.emotion || DEFAULT_FACE_EMOTION;
-        applyFaceEmotion(latestSubmittedEmotion.value);
+        syncVisualEmotion();
 
         jump();
         blobState.setState(STATES.IDLE);
@@ -947,6 +1046,7 @@ const handlePINSetupComplete = async () => {
 const handlePINUnlockComplete = async () => {
     showPINModal.value = false;
     await journal.loadEntries();
+    syncVisualEmotion();
 };
 
 const handlePINCancel = async () => {
@@ -960,22 +1060,13 @@ const handlePINCancel = async () => {
 
 watch(
     entries,
-    () => {
-        if (selectedEmotion.value) {
-            return;
-        }
-
-        latestSubmittedEmotion.value = resolveLatestSubmittedEmotion();
-        applyFaceEmotion(latestSubmittedEmotion.value);
-    },
+    () => syncVisualEmotion(),
     { immediate: true }
 );
 
 watch(
-    selectedEmotion,
-    (emotionId) => {
-        applyFaceEmotion(emotionId || DEFAULT_FACE_EMOTION);
-    },
+    [selectedEmotion, journalOpen, expressiveness],
+    () => syncVisualEmotion(),
     { immediate: true }
 );
 
@@ -1087,6 +1178,10 @@ watch(
     { immediate: true }
 );
 
+onBeforeUnmount(() => {
+    clearEmotionRefreshTimer();
+});
+
 watch(
     () => blobState.state.value,
     (next) => {
@@ -1165,8 +1260,7 @@ onBeforeUnmount(() => {
 
         <Transition name="overlay-fade" appear>
             <PINWindow v-if="showPINModal" @password-set="handlePINSetupComplete"
-                @password-unlocked="handlePINUnlockComplete"
-                @cancel="handlePINCancel" />
+                @password-unlocked="handlePINUnlockComplete" @cancel="handlePINCancel" />
         </Transition>
 
         <Transition name="overlay-fade" appear>
@@ -1177,11 +1271,14 @@ onBeforeUnmount(() => {
 
         <Transition name="overlay-fade" appear>
             <SettingsWindow v-if="showSettingsModal" :blob-size="appSettings.blobSize"
-                :sleep-amount="sleepSetupDraft.amount" :sleep-unit="sleepSetupDraft.unit"
-                :ask-every-time="!sleepSetupDraft.rememberAsDefault" :sleep-tag-visible="appSettings.sleepTagVisible"
+                :use-assigned-hue-everywhere="appSettings.useAssignedHueEverywhere"
+                :show-assigned-hue-toggle="hasAssignedHueDifference" :sleep-amount="sleepSetupDraft.amount"
+                :sleep-unit="sleepSetupDraft.unit" :ask-every-time="!sleepSetupDraft.rememberAsDefault"
+                :sleep-tag-visible="appSettings.sleepTagVisible"
                 :start-on-system-restart="appSettings.startOnSystemRestart" @close="closeSettings"
                 @update:blob-size="updateBlobSizeSetting" @update:sleep-amount="updateSleepAmountSetting"
                 @update:sleep-unit="updateSleepUnitSetting" @update:ask-every-time="updateAskEveryTimeSetting"
+                @update:use-assigned-hue-everywhere="updateUseAssignedHueEverywhereSetting"
                 @update:sleep-tag-visible="updateSleepTagVisibleSetting"
                 @update:start-on-system-restart="updateStartOnSystemRestartSetting" @redo-onboarding="redoOnboarding"
                 @clear-journal="clearJournal" @hard-reset="hardReset" />

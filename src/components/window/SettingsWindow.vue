@@ -15,6 +15,14 @@ const props = defineProps({
         type: Number,
         default: 100,
     },
+    useAssignedHueEverywhere: {
+        type: Boolean,
+        default: false,
+    },
+    showAssignedHueToggle: {
+        type: Boolean,
+        default: false,
+    },
     sleepAmount: {
         type: [Number, String],
         default: 1,
@@ -41,6 +49,7 @@ const emit = defineEmits([
     "close",
     "confirm",
     "update:blob-size",
+    "update:use-assigned-hue-everywhere",
     "update:sleep-amount",
     "update:sleep-unit",
     "update:ask-every-time",
@@ -88,6 +97,11 @@ const blobSizeModel = computed({
         const nextValue = Math.min(150, Math.max(50, Math.round(Number(value) || 100)));
         emit("update:blob-size", nextValue);
     },
+});
+
+const useAssignedHueEverywhereModel = computed({
+    get: () => Boolean(props.useAssignedHueEverywhere),
+    set: (value) => emit("update:use-assigned-hue-everywhere", Boolean(value)),
 });
 
 const askEveryTimeModel = computed({
@@ -208,9 +222,13 @@ watch(
 
             <p class="eyebrow">Settings</p>
 
-            <h1 class="title">Blob Size</h1>
+            <h1 class="title">Blob Appearance</h1>
             <RangeSlider id="blob-size-slider" v-model="blobSizeModel" left-label="50%" right-label="150%"
                 center-label="100%" :show-markers="true" aria-label="Blob size" :min="50" :max="150" :step="10" />
+
+            <Checkbox v-if="props.showAssignedHueToggle" v-model="useAssignedHueEverywhereModel">
+                Use assigned hue instead of chosen color
+            </Checkbox>
 
             <h1 class="title">Sleep Behavior</h1>
             <div class="field duration-field">
@@ -228,6 +246,8 @@ watch(
             <Checkbox v-model="sleepTagVisibleModel">
                 Show Wake-up Tag
             </Checkbox>
+
+            <p class="hint">Blob can always be woken up manually via system tray icon.</p>
 
             <h1 class="title">Startup</h1>
             <Checkbox v-model="startOnSystemRestartModel">
@@ -297,12 +317,11 @@ watch(
 
 <style scoped>
 .window {
-    width: 40rem;
-    max-width: calc(100vw - 2rem);
-    max-height: calc(100vh - 2rem);
+    height: fit-content;
+    max-height: 90vh;
     overflow: auto;
     z-index: 1001;
-    padding-bottom: 3rem;
+    padding-bottom: 6rem;
 }
 
 .title {

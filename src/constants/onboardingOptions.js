@@ -32,5 +32,3 @@ export const sliderOptions = [
         rightTooltip: "You often decide through feeling and empathy.",
     },
 ];
-
-export const reactionOptions = ["sparkles", "flowers", "hearts"];

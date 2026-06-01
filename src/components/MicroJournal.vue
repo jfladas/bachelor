@@ -236,72 +236,77 @@ const listAreaStyle = computed(() => {
             </header>
 
             <div v-if="!props.promptVisible || !props.emotionVisible || !props.textVisible" class="optional-actions">
-                <Button v-if="!props.promptVisible" variant="secondary" @click="showPromptSection">
-                    Show prompt
-                </Button>
 
                 <Button v-if="!props.emotionVisible" variant="secondary" @click="showEmotionSection">
                     Show emotion
                 </Button>
 
+                <Button v-if="!props.promptVisible" variant="secondary" @click="showPromptSection">
+                    Show inspiration
+                </Button>
+
                 <Button v-if="!props.textVisible" variant="secondary" @click="showTextSection">
-                    Show text field
+                    Show entry field
                 </Button>
             </div>
-            <div v-if="props.promptVisible" class="subpanel optional"
-                :style="emotionVisible && props.selectedEmotion ? '--emotion-hue: var(--' + props.selectedEmotion + ')' : '--emotion-hue: var(--hue)'">
-                <button type="button" class="remove-option" aria-label="Remove prompt" @click="hidePromptSection">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
-                        <path
-                            d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
-                    </svg>
-                </button>
-                <p class="label">Prompt</p>
-                <div class="prompt-field field">
 
-                    <p class="prompt">{{ props.prompt || "Just write anything." }}</p>
-                    <Button variant="secondary circle-small" data-tooltip="New prompt" @click="$emit('rotate-prompt')">
+            <div class="subpanels">
+                <div v-if="props.emotionVisible" class="subpanel optional">
+                    <button class="remove-option" aria-label="Remove emotion" @click="hideEmotionSection">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
-                            <path fill-rule="evenodd"
-                                d="M13.836 2.477a.75.75 0 0 1 .75.75v3.182a.75.75 0 0 1-.75.75h-3.182a.75.75 0 0 1 0-1.5h1.37l-.84-.841a4.5 4.5 0 0 0-7.08.932.75.75 0 0 1-1.3-.75 6 6 0 0 1 9.44-1.242l.842.84V3.227a.75.75 0 0 1 .75-.75Zm-.911 7.5A.75.75 0 0 1 13.199 11a6 6 0 0 1-9.44 1.241l-.84-.84v1.371a.75.75 0 0 1-1.5 0V9.591a.75.75 0 0 1 .75-.75H5.35a.75.75 0 0 1 0 1.5H3.98l.841.841a4.5 4.5 0 0 0 7.08-.932.75.75 0 0 1 1.025-.273Z"
-                                clip-rule="evenodd" />
+                            <path
+                                d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
                         </svg>
-                    </Button>
+                    </button>
+                    <div class="emotion-field field">
+
+                        <Button v-for="tag in props.emotionTags" :key="tag.id" variant="secondary" class="emotion-chip"
+                            :class="[tag.id, { active: props.selectedEmotion === tag.id }]"
+                            :style="{ '--emotion-hue': `var(--${tag.id})` }" @click="$emit('select-emotion', tag.id)">
+                            <div class="icon" v-html="tag.svg"></div>
+                            <div v-if="props.selectedEmotion === tag.id">{{ tag.label }}</div>
+                        </Button>
+                    </div>
                 </div>
 
-            </div>
+                <div v-if="props.promptVisible" class="subpanel optional"
+                    :style="emotionVisible && props.selectedEmotion ? '--emotion-hue: var(--' + props.selectedEmotion + ')' : '--emotion-hue: var(--hue)'">
+                    <button type="button" class="remove-option" aria-label="Remove inspiration"
+                        @click="hidePromptSection">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+                            <path
+                                d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
+                        </svg>
+                    </button>
+                    <div class="prompt-field field">
 
-            <div v-if="props.emotionVisible" class="subpanel optional">
-                <button class="remove-option" aria-label="Remove emotion" @click="hideEmotionSection">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
-                        <path
-                            d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
-                    </svg>
-                </button>
-                <p class="label">Emotion</p>
-                <div class="emotion-field field">
+                        <Button variant="secondary circle-small" data-tooltip="New inspiration"
+                            @click="$emit('rotate-prompt')">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+                                <path fill-rule="evenodd"
+                                    d="M13.836 2.477a.75.75 0 0 1 .75.75v3.182a.75.75 0 0 1-.75.75h-3.182a.75.75 0 0 1 0-1.5h1.37l-.84-.841a4.5 4.5 0 0 0-7.08.932.75.75 0 0 1-1.3-.75 6 6 0 0 1 9.44-1.242l.842.84V3.227a.75.75 0 0 1 .75-.75Zm-.911 7.5A.75.75 0 0 1 13.199 11a6 6 0 0 1-9.44 1.241l-.84-.84v1.371a.75.75 0 0 1-1.5 0V9.591a.75.75 0 0 1 .75-.75H5.35a.75.75 0 0 1 0 1.5H3.98l.841.841a4.5 4.5 0 0 0 7.08-.932.75.75 0 0 1 1.025-.273Z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                        </Button>
+                        <p class="prompt">{{ props.prompt || "Just write anything." }}</p>
 
-                    <Button v-for="tag in props.emotionTags" :key="tag.id" variant="secondary" class="emotion-chip"
-                        :class="[tag.id, { active: props.selectedEmotion === tag.id }]"
-                        :style="{ '--emotion-hue': `var(--${tag.id})` }" @click="$emit('select-emotion', tag.id)">
-                        <div class="icon" v-html="tag.svg"></div>
-                        <div v-if="props.selectedEmotion === tag.id">{{ tag.label }}</div>
-                    </Button>
+                    </div>
+
                 </div>
-            </div>
 
-            <div v-if="props.textVisible" class="subpanel optional">
-                <button type="button" class="remove-option" aria-label="Remove entry field" @click="hideTextSection">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
-                        <path
-                            d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
-                    </svg>
-                </button>
-                <label class="label" for="micro-journal-entry">Entry</label>
-                <textarea id="micro-journal-entry" class="textarea" :value="props.textValue"
-                    :maxlength="props.maxLength" placeholder="Tell me something..."
-                    @input="$emit('update:text', $event.target.value)" spellcheck="false" />
-                <span class="char-count">{{ props.textValue.length }}/{{ props.maxLength }}</span>
+                <div v-if="props.textVisible" class="subpanel optional">
+                    <button type="button" class="remove-option" aria-label="Remove entry field"
+                        @click="hideTextSection">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
+                            <path
+                                d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
+                        </svg>
+                    </button>
+                    <textarea id="micro-journal-entry" class="textarea" :value="props.textValue"
+                        :maxlength="props.maxLength" placeholder="Write something..."
+                        @input="$emit('update:text', $event.target.value)" spellcheck="false" />
+                    <span class="char-count">{{ props.textValue.length }}/{{ props.maxLength }}</span>
+                </div>
             </div>
 
             <div class="actions">
@@ -362,6 +367,13 @@ const listAreaStyle = computed(() => {
     border-radius: 2rem;
 }
 
+.subpanels {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
 .subpanel {
     display: flex;
     flex-direction: column;
@@ -416,18 +428,16 @@ const listAreaStyle = computed(() => {
     outline-offset: 2px;
 }
 
-.label {
-    margin: 0.5rem 0 0.5rem 0;
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--text-strong);
-}
-
 .prompt-field {
     flex-direction: row;
-    align-items: baseline;
+    align-items: center;
     justify-content: start;
-    gap: 1rem;
+    gap: 0.75rem;
+    padding: 0 2rem 0 0.5rem;
+}
+
+.prompt-field Button {
+    flex-shrink: 0;
 }
 
 .prompt {
@@ -435,7 +445,7 @@ const listAreaStyle = computed(() => {
     font-weight: 500;
     font-family: 'GeneralSans-VariableItalic', 'GeneralSans-Italic', sans-serif;
     color: oklch(var(--darker-l) var(--darker-c) var(--emotion-hue));
-    margin: 0 0 1rem 0;
+    margin: 0;
 }
 
 .emotion-field {
@@ -521,6 +531,10 @@ const listAreaStyle = computed(() => {
     bottom: 0.5rem;
     color: var(--text);
     font-size: 0.8rem;
+    text-shadow: 0 0 0.1rem var(--white);
+    background: radial-gradient(ellipse at center, var(--white) 50%, transparent);
+    user-select: none;
+    pointer-events: none;
 }
 
 .header-buttons {

@@ -101,23 +101,22 @@ export const calculateAssignedProfile = ({ sliders, traits, hue }) => {
         (normalizedTraits.includes("creative") ? 0.5 : 0) +
         (normalizedTraits.includes("chill") ? 0.25 : 0);
 
-    const calculatedVariability =
-        normalizedSliders.rationalEmotional * 0.5 + (normalizedTraits.includes("mysterious") ? 0.5 : 0);
+    const calculatedExpressiveness =
+        normalizedSliders.reservedOpen * 0.25 +
+        normalizedSliders.rationalEmotional * 0.25 +
+        0.25 +
+        (normalizedTraits.includes("cute") ? 0.25 : 0) -
+        (normalizedTraits.includes("mysterious") ? 0.25 : 0);
 
     const calculatedActivity =
         normalizedSliders.calmAssertive * 0.25 +
         (normalizedTraits.includes("gentle") ? 0 : 0.25) +
         (normalizedTraits.includes("active") ? 0.5 : 0);
 
-    const calculatedReaction = normalizedTraits.includes("cute")
-        ? (normalizedSliders.reservedOpen > 0.5 ? "hearts" : "flowers")
-        : "sparkles";
-
     return {
         assignedHue: calculatedHue,
         symmetry: calculatedSymmetry,
-        variability: calculatedVariability,
+        expressiveness: calculatedExpressiveness,
         activity: calculatedActivity,
-        reaction: calculatedReaction,
     };
 };
