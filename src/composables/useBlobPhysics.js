@@ -19,6 +19,8 @@ const SLEEP_TIME_SCALE = 0.2;
 const PERSIST_INTERVAL_MS = 500;
 const PIN_HOLD_DELAY_MS = 500;
 const PIN_PROGRESS_DURATION_MS = 500;
+const MAX_DRAG_STEP = 18;
+const MAX_DRAG_SUBSTEPS = 6;
 
 const randomBetween = (min, max) => min + Math.random() * (max - min);
 const lerp = (start, end, t) => start + (end - start) * t;
@@ -814,9 +816,25 @@ export const useBlobPhysics = ({ ballRadii, blobScale, activity }) => {
         const x = Math.min(Math.max(event.clientX, radius), width - radius);
         const y = Math.min(Math.max(event.clientY, radius), height - radius);
 
-        Body.setPosition(activeBody, { x, y });
+        const startX = activeBody.position.x;
+        const startY = activeBody.position.y;
+        const dx = x - startX;
+        const dy = y - startY;
+        const distance = Math.hypot(dx, dy);
 
-        separateOverlappingBalls();
+        if (distance > 0.0001) {
+            const steps = Math.max(1, Math.min(MAX_DRAG_SUBSTEPS, Math.ceil(distance / MAX_DRAG_STEP)));
+
+            for (let step = 1; step <= steps; step += 1) {
+                const t = step / steps;
+                Body.setPosition(activeBody, {
+                    x: startX + dx * t,
+                    y: startY + dy * t,
+                });
+                separateOverlappingBalls();
+            }
+        }
+
         syncBallPositions();
         checkConvexAngle();
         beginPinHold();
