@@ -13,4 +13,5 @@ A continuous, subtle relationship with a digital representation of yourself that
 ## Development
 
 - Start app (renderer + Electron): `npm run dev`
-- Build packaged app: `npm run build`
+- Build packaged app (Windows): `npm run build`
+- For MacOS build see [docs/MAC_BUILD.md](docs/MAC_BUILD.md)
