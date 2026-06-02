@@ -42,9 +42,15 @@
     ],
     "win": {
       "target": [
-        "nsis"
+        "appx"
       ],
       "icon": "electron/assets/icon.ico"
+    },
+    "appx": {
+      "identityName": "jfladas.AmorphousBlob",
+      "publisher": "CN=37A20586-E891-446F-8FED-1120E604C38D",
+      "publisherDisplayName": "jfladas",
+      "displayName": "Amorphous Blob"
     },
     "mac": {
       "target": [
