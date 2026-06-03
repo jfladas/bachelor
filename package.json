@@ -23,7 +23,7 @@
     "@vitejs/plugin-vue": "^5.2.1",
     "concurrently": "^9.1.2",
     "electron": "^34.0.2",
-    "electron-builder": "^24.6.0",
+    "electron-builder": "^25.1.8",
     "vite": "^6.0.5"
   },
   "main": "electron/main.cjs",

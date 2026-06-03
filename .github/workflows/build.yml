@@ -41,7 +41,9 @@ jobs:
         env:
           CSC_LINK: "${{ secrets.MAC_CSC_LINK }}"
           CSC_KEY_PASSWORD: "${{ secrets.MAC_CSC_KEY_PASSWORD }}"
-          ELECTRON_BUILDER_NOTARIZE_NOTARYTOOL: "true"
+          NOTARIZE_APPLE_API_KEY: "${{ runner.temp }}/.private_keys/AuthKey_${{ secrets.APPLE_API_KEY_ID }}.p8"
+          NOTARIZE_APPLE_API_KEY_ID: "${{ secrets.APPLE_API_KEY_ID }}"
+          NOTARIZE_APPLE_ISSUER_ID: "${{ secrets.APPLE_API_ISSUER }}"
           APPLE_API_KEY: "${{ runner.temp }}/.private_keys/AuthKey_${{ secrets.APPLE_API_KEY_ID }}.p8"
           APPLE_API_KEY_ID: "${{ secrets.APPLE_API_KEY_ID }}"
           APPLE_API_ISSUER: "${{ secrets.APPLE_API_ISSUER }}"
