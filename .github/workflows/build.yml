@@ -29,6 +29,11 @@ jobs:
           mkdir -p "$RUNNER_TEMP/.private_keys"
           echo "${{ secrets.APPLE_API_KEY }}" | base64 --decode > "$RUNNER_TEMP/.private_keys/AuthKey_${{ secrets.APPLE_API_KEY_ID }}.p8"
 
+      - name: Configure Keychain Lock Settings
+        run: |
+          security set-keychain-settings -lut 21600 "$HOME/Library/Keychains/login.keychain-db"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$HOME/Library/Keychains/login.keychain-db" || true
+
       - name: Build Mac App
         run: npx electron-builder --mac --publish never
         env:
