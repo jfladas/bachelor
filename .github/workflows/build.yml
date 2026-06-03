@@ -29,6 +29,13 @@ jobs:
           mkdir -p ~/.private_keys
           echo "${{ secrets.APPLE_API_KEY }}" | base64 --decode > ~/.private_keys/AuthKey_${{ secrets.APPLE_API_KEY_ID }}.p8
 
+      - name: Debug Apple Authentication
+        run: |
+          xcrun notarytool history \
+            --key "~/.private_keys/AuthKey_${{ secrets.APPLE_API_KEY_ID }}.p8" \
+            --key-id "${{ secrets.APPLE_API_KEY_ID }}" \
+            --issuer "${{ secrets.APPLE_API_ISSUER }}"
+
       - name: Build and Publish Mac App
         run: npx electron-builder --mac --publish always
         env:
