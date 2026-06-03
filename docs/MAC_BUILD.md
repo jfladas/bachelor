@@ -1,4 +1,4 @@
-**Mac Build: how to create a free (unsigned) mac build**
+**Mac Build: local unsigned test build**
 
 - **Quick steps to build locally on a Mac (unsigned test build):**
   1.  Install dependencies:
@@ -28,7 +28,7 @@
   5.  Find output in `dist_electron`.
 
 - **Signing & notarization (recommended for public releases):**
-  - To avoid Gatekeeper warnings, sign and notarize your app. This requires an Apple Developer account and CI secrets (certificate, Apple ID + app-specific password or API key). I did not add signing in the workflow; you can add signing later when you have credentials.
+  - The repository now uses GitHub Actions for signed and notarized mac releases. Use that workflow when you have the Apple signing secrets configured.
 
-- **Summary recommendation for a public free release:**
-  - Produce `dmg` (consumer-friendly) + `zip` on mac and upload them wherever you want to distribute the app. Get an Apple Developer account if you want a smooth user experience without Gatekeeper prompts. For Windows, distribute the `nsis` installer you already produce with `npm run build`.
+- **Summary recommendation:**
+  - Use this page for a quick local unsigned check on macOS. For public distribution, rely on the GitHub Actions build that produces the signed mac artifact and the existing Windows installer from `npm run build`.
