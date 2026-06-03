@@ -62,6 +62,9 @@
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
+      "additionalArguments": [
+        "--verbose=4"
+      ],
       "icon": "electron/assets/icon.icns"
     },
     "nsis": {
