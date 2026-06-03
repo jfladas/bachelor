@@ -30,7 +30,8 @@ const {
 </script>
 
 <template>
-  <Blob v-if="onboardingLoaded && onboardingCompleted" :onboarding-data="onboardingData" />
+  <Blob v-if="onboardingLoaded && onboardingCompleted" :onboarding-data="onboardingData"
+    :selected-traits="selectedTraits" :question-answers="questionAnswers" />
 
   <OnboardingWindow v-if="onboardingLoaded && !onboardingCompleted" :onboarding-loaded="onboardingLoaded"
     :onboarding-completed="onboardingCompleted" :onboarding-saving="onboardingSaving" :onboarding-step="onboardingStep"

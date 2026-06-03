@@ -3,9 +3,12 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import BlobVisuals from "./BlobVisuals.vue";
 import RadialMenu from "./RadialMenu.vue";
 import MicroJournal from "./MicroJournal.vue";
+import SessionBar from "./SessionBar.vue";
+import BlobSheet from "./BlobSheet.vue";
 import PINWindow from "./window/PINWindow.vue";
 import SleepWindow from "./window/SleepWindow.vue";
 import SettingsWindow from "./window/SettingsWindow.vue";
+import SessionEndWindow from "./window/SessionEndWindow.vue";
 import { useBlobPhysics } from "../composables/useBlobPhysics";
 import { STATES } from "../composables/useBlobState";
 import { useBlobFace } from "../composables/useBlobFace";
@@ -26,6 +29,18 @@ const props = defineProps({
             expressiveness: 0.5,
             activity: 0.5,
             traits: [],
+        }),
+    },
+    selectedTraits: {
+        type: Array,
+        default: () => [],
+    },
+    questionAnswers: {
+        type: Object,
+        default: () => ({
+            reservedOpen: 0.5,
+            calmAssertive: 0.5,
+            rationalEmotional: 0.5,
         }),
     },
 });
@@ -51,7 +66,15 @@ const hasAssignedHueDifference = computed(() => baseHue.value !== assignedHue.va
 const symmetry = computed(() => clampUnit(props.onboardingData?.symmetry, 0.5));
 const expressiveness = computed(() => clampUnit(props.onboardingData?.expressiveness, 0.5));
 const activity = computed(() => clampUnit(props.onboardingData?.activity, 0.5));
-const hasOptimisticTrait = computed(() => Array.isArray(props.onboardingData?.traits) && props.onboardingData.traits.includes("optimistic"));
+const hasOptimisticTrait = computed(() => {
+    const traits = Array.isArray(props.selectedTraits) && props.selectedTraits.length > 0
+        ? props.selectedTraits
+        : Array.isArray(props.onboardingData?.traits)
+            ? props.onboardingData.traits
+            : [];
+
+    return traits.includes("optimistic");
+});
 
 const ballRadii = computed(() => {
     const centerIndex = (BALL_COUNT - 1) / 2;
@@ -98,6 +121,17 @@ const settingsLoaded = ref(false);
 const showSettingsModal = ref(false);
 const blobScale = computed(() => appSettings.value.blobSize / 100);
 const emotionRefreshTimerId = ref(null);
+const SESSION_DURATION_MS = 5 * 60 * 1000;
+const SESSION_EXTENSION_MS = 3 * 60 * 1000;
+const SESSION_WRAP_UP_MS = 60 * 1000;
+const sessionPhase = ref("idle");
+const sessionEndsAt = ref(null);
+const sessionWrapUpEndsAt = ref(null);
+const sessionNow = ref(Date.now());
+const sessionTickTimerId = ref(null);
+const sessionEndTimerId = ref(null);
+const sessionWrapUpTimerId = ref(null);
+const isResettingSession = ref(false);
 
 const {
     positions,
@@ -156,6 +190,193 @@ const clearEmotionRefreshTimer = () => {
         window.clearTimeout(emotionRefreshTimerId.value);
         emotionRefreshTimerId.value = null;
     }
+};
+
+const clearSessionTickTimer = () => {
+    if (sessionTickTimerId.value) {
+        window.clearInterval(sessionTickTimerId.value);
+        sessionTickTimerId.value = null;
+    }
+};
+
+const clearSessionEndTimer = () => {
+    if (sessionEndTimerId.value) {
+        window.clearTimeout(sessionEndTimerId.value);
+        sessionEndTimerId.value = null;
+    }
+};
+
+const clearSessionWrapUpTimer = () => {
+    if (sessionWrapUpTimerId.value) {
+        window.clearTimeout(sessionWrapUpTimerId.value);
+        sessionWrapUpTimerId.value = null;
+    }
+};
+
+const setSessionClock = () => {
+    sessionNow.value = Date.now();
+};
+
+const formatSessionDuration = (remainingMs) => {
+    const safeRemainingMs = Math.max(0, Math.round(Number(remainingMs) || 0));
+    const totalSeconds = Math.floor(safeRemainingMs / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+};
+
+const sessionRemainingMs = computed(() => {
+    if (sessionPhase.value !== "active" || !Number.isFinite(sessionEndsAt.value)) {
+        return 0;
+    }
+
+    return Math.max(0, sessionEndsAt.value - sessionNow.value);
+});
+
+const sessionWrapUpRemainingMs = computed(() => {
+    if (sessionPhase.value !== "wrap-up" || !Number.isFinite(sessionWrapUpEndsAt.value)) {
+        return 0;
+    }
+
+    return Math.max(0, sessionWrapUpEndsAt.value - sessionNow.value);
+});
+
+const sessionRemainingLabel = computed(() => formatSessionDuration(sessionRemainingMs.value));
+const sessionWrapUpRemainingLabel = computed(() => formatSessionDuration(sessionWrapUpRemainingMs.value));
+const showSessionBar = computed(() => sessionPhase.value === "active");
+const showSessionWrapUp = computed(() => sessionPhase.value === "wrap-up");
+const canExtendSession = computed(() => sessionPhase.value === "active" && sessionRemainingMs.value > 0 && sessionRemainingMs.value < 60 * 1000);
+
+const armSessionEndTimer = () => {
+    clearSessionEndTimer();
+
+    if (!Number.isFinite(sessionEndsAt.value)) {
+        return;
+    }
+
+    const remainingMs = Math.max(0, sessionEndsAt.value - Date.now());
+    sessionEndTimerId.value = window.setTimeout(() => {
+        beginSessionWrapUp("timeout");
+    }, remainingMs);
+};
+
+const armSessionWrapUpTimer = () => {
+    clearSessionWrapUpTimer();
+
+    if (!Number.isFinite(sessionWrapUpEndsAt.value)) {
+        return;
+    }
+
+    const remainingMs = Math.max(0, sessionWrapUpEndsAt.value - Date.now());
+    sessionWrapUpTimerId.value = window.setTimeout(() => {
+        performSessionReset();
+    }, remainingMs);
+};
+
+const startSessionClock = () => {
+    clearSessionTickTimer();
+    setSessionClock();
+    sessionTickTimerId.value = window.setInterval(() => {
+        setSessionClock();
+
+        if (sessionPhase.value === "active" && sessionRemainingMs.value <= 0) {
+            beginSessionWrapUp("timeout");
+        }
+    }, 1000);
+};
+
+function closeSessionTransientUi() {
+    closeMenu({ clearDraft: true });
+    showPINModal.value = false;
+    showSleepModal.value = false;
+    showSettingsModal.value = false;
+    pendingEntryOptions.value = null;
+}
+
+function beginSessionWrapUp(reason = "timeout") {
+    if (sessionPhase.value !== "active") {
+        return;
+    }
+
+    sessionPhase.value = "wrap-up";
+    sessionEndsAt.value = null;
+    sessionWrapUpEndsAt.value = Date.now() + SESSION_WRAP_UP_MS;
+    setSessionClock();
+    clearSessionEndTimer();
+    closeSessionTransientUi();
+    armSessionWrapUpTimer();
+
+    if (reason === "quit") {
+        syncVisualEmotion();
+    }
+}
+
+function startSession() {
+    if (sessionPhase.value !== "idle") {
+        return;
+    }
+
+    sessionPhase.value = "active";
+    sessionEndsAt.value = Date.now() + SESSION_DURATION_MS;
+    sessionWrapUpEndsAt.value = null;
+    isResettingSession.value = false;
+    startSessionClock();
+    armSessionEndTimer();
+}
+
+async function performSessionReset() {
+    if (isResettingSession.value) {
+        return;
+    }
+
+    isResettingSession.value = true;
+    sessionPhase.value = "resetting";
+    clearSessionEndTimer();
+    clearSessionWrapUpTimer();
+    clearSessionTickTimer();
+    closeSessionTransientUi();
+
+    try {
+        await hardReset();
+    } catch (error) {
+        console.error("Failed to reset session:", error);
+        isResettingSession.value = false;
+        sessionPhase.value = "wrap-up";
+        sessionWrapUpEndsAt.value = Date.now() + SESSION_WRAP_UP_MS;
+        armSessionWrapUpTimer();
+    }
+}
+
+const handleQuitSession = () => {
+    beginSessionWrapUp("quit");
+};
+
+const handleExtendSession = () => {
+    if (!canExtendSession.value) {
+        return;
+    }
+
+    sessionEndsAt.value = Date.now() + sessionRemainingMs.value + SESSION_EXTENSION_MS;
+    setSessionClock();
+    armSessionEndTimer();
+};
+
+const handlePrintBlobSheet = () => {
+    if (typeof window !== "undefined" && typeof window.print === "function") {
+        window.print();
+    }
+};
+
+const handleSkipBlobSheet = () => {
+    performSessionReset();
+};
+
+const handleSessionPointerEnter = () => {
+    setInteractionLocked(true);
+};
+
+const handleSessionPointerLeave = () => {
+    setInteractionLocked(menuOpen.value || journalOpen.value || secMenuOpen.value || showPINModal.value || showSleepModal.value || showSettingsModal.value);
 };
 
 const getEmotionDurationMs = (emotionId) => {
@@ -282,6 +503,10 @@ let sleepTagShowTimerId = null;
 
 onMounted(async () => {
     await journal.loadEntries();
+});
+
+onMounted(() => {
+    startSession();
 });
 
 onMounted(() => {
@@ -1180,6 +1405,9 @@ watch(
 
 onBeforeUnmount(() => {
     clearEmotionRefreshTimer();
+    clearSessionTickTimer();
+    clearSessionEndTimer();
+    clearSessionWrapUpTimer();
 });
 
 watch(
@@ -1215,6 +1443,11 @@ onBeforeUnmount(() => {
 
 <template>
     <div class="shell" :style="shellStyle">
+        <SessionBar v-if="showSessionBar" :remaining-label="sessionRemainingLabel" :show-extend="canExtendSession"
+            :is-sub-ten="sessionRemainingMs < 10000" :disabled="isResettingSession" @quit-session="handleQuitSession"
+            @extend-session="handleExtendSession" @pointer-enter="handleSessionPointerEnter"
+            @pointer-leave="handleSessionPointerLeave" />
+
         <BlobVisuals :hue-variables="hueVariables" :blob-path="blobPath" :edge-width="EDGE_WIDTH" :grabbing="grabbing"
             :face-style="faceStyle" :face-parts="faceParts"
             :face-eyes-style="{ transform: `translateY(-175%) translate(${eyesOffset.x}px, ${eyesOffset.y}px)`, transition: 'transform 0.3s ease' }"
@@ -1283,6 +1516,15 @@ onBeforeUnmount(() => {
                 @update:start-on-system-restart="updateStartOnSystemRestartSetting" @redo-onboarding="redoOnboarding"
                 @clear-journal="clearJournal" @hard-reset="hardReset" />
         </Transition>
+
+        <Transition name="overlay-fade" appear>
+            <SessionEndWindow v-if="showSessionWrapUp" :remaining-label="sessionWrapUpRemainingLabel"
+                @print-sheet="handlePrintBlobSheet" @skip-printing="handleSkipBlobSheet"
+                @pointer-enter="handleSessionPointerEnter" @pointer-leave="handleSessionPointerLeave" />
+        </Transition>
+
+        <BlobSheet class="print-sheet" :onboarding-data="props.onboardingData" :selected-traits="props.selectedTraits"
+            :question-answers="props.questionAnswers" :entries="entries" :blob-size="appSettings.blobSize" />
     </div>
 </template>
 
@@ -1413,5 +1655,19 @@ onBeforeUnmount(() => {
 .overlay-fade-enter-from,
 .overlay-fade-leave-to {
     opacity: 0;
+}
+
+.print-sheet {
+    display: none;
+}
+
+@media print {
+    .print-sheet {
+        display: block;
+    }
+
+    .shell :not(.print-sheet):not(.print-sheet *) {
+        display: none !important;
+    }
 }
 </style>

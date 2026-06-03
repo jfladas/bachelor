@@ -42,6 +42,7 @@
     ],
     "win": {
       "target": [
+        "nsis",
         "appx"
       ],
       "icon": "electron/assets/icon.ico"
