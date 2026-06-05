@@ -6,7 +6,7 @@ This document describes the app from a user-facing perspective and is strictly l
 
 - Amorphous Blob is a lightweight desktop companion and micro-journal with a playful animated "blob" interface. It targets short, frequent entries and gentle engagement.
 
-## Primary user flows (implemented)
+## Primary user flows
 
 - **First-run / Onboarding**
   - On first run the app shows an onboarding flow where users adjust simple personality sliders/traits and finally confirm/choose a color.
@@ -33,7 +33,7 @@ This document describes the app from a user-facing perspective and is strictly l
   - Sleep mode is implemented. While sleeping the blob is not visible on screen and can be woken by clicking on tag or via system tray.
   - Sleep duration can be set in minutes/hours or unlimited. Sleep drafting and preferences are persisted to localStorage (`src/utils/storage.js`).
 
-- **Settings actions (implemented)**
+- **Settings actions**
   - The Settings UI (`src/components/window/SettingsWindow.vue`) supports adjusting blob size, sleep defaults, and startup behavior.
   - Danger actions implemented: redo onboarding, clear journal (reset journal storage), and a hard reset. These call IPC handlers in the main process.
 
