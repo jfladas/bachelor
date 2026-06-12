@@ -28,7 +28,7 @@
   },
   "main": "electron/main.cjs",
   "build": {
-    "appId": "com.yourname.amorphous-blob",
+    "appId": "com.jfladas.amorphous-blob",
     "copyright": "Copyright 2026 jfladas",
     "productName": "Amorphous Blob",
     "directories": {

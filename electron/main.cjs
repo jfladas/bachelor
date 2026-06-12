@@ -386,6 +386,60 @@ function registerIpcHandlers() {
         return setStartOnLoginEnabled(enabled);
     });
 
+    ipcMain.handle('app:print-default', async (event) => {
+        const sender = event?.sender;
+        if (!sender || sender.isDestroyed()) {
+            return { success: false, error: 'Print source is not available' };
+        }
+
+        const sourceWindow = BrowserWindow.fromWebContents(sender);
+        if (!sourceWindow || sourceWindow.isDestroyed()) {
+            return { success: false, error: 'Print window is not available' };
+        }
+
+        let defaultPrinterName = null;
+        try {
+            const printers = await sourceWindow.webContents.getPrintersAsync();
+            const defaultPrinter = printers.find((printer) => printer.isDefault);
+            defaultPrinterName = defaultPrinter?.name || null;
+        } catch (error) {
+            console.error('Failed to resolve default printer:', error);
+        }
+
+        const printOptions = {
+            silent: true,
+            printBackground: true,
+            pageSize: {
+                width: 210000,
+                height: 297000,
+            },
+            margins: {
+                marginType: 'default',
+            },
+        };
+
+        if (defaultPrinterName) {
+            printOptions.deviceName = defaultPrinterName;
+        }
+
+        return new Promise((resolve) => {
+            sourceWindow.webContents.print(printOptions, (success, failureReason) => {
+                if (!success) {
+                    const errorMessage = failureReason || 'Print failed';
+                    const printerLabel = defaultPrinterName || 'system default printer';
+                    const printableHint = /invalid printer settings/i.test(errorMessage)
+                        ? `Printer '${printerLabel}' rejected silent print settings.`
+                        : `Printer '${printerLabel}' failed to print.`;
+                    console.error('Silent print failed:', printableHint, errorMessage);
+                    resolve({ success: false, error: `${printableHint} ${errorMessage}`.trim() });
+                    return;
+                }
+
+                resolve({ success: true, printerName: defaultPrinterName });
+            });
+        });
+    });
+
     ipcMain.handle('journal:reset', () => {
         const didReset = resetJournalState();
         if (!didReset) {

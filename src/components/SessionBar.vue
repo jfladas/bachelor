@@ -47,7 +47,7 @@ const emit = defineEmits(["quit-session", "extend-session", "pointer-enter", "po
                         d="M3.05 3.05a7 7 0 1 1 9.9 9.9 7 7 0 0 1-9.9-9.9Zm1.627.566 7.707 7.707a5.501 5.501 0 0 0-7.707-7.707Zm6.646 8.768L3.616 4.677a5.501 5.501 0 0 0 7.707 7.707Z"
                         clip-rule="evenodd" />
                 </svg>
-                Quit Session
+                End Session
             </Button>
         </div>
     </div>
@@ -67,7 +67,7 @@ const emit = defineEmits(["quit-session", "extend-session", "pointer-enter", "po
     gap: 1rem;
     width: 30rem;
     height: fit-content;
-    padding: 0.75rem;
+    padding: 0.75rem 0.85rem;
     border-radius: 3rem;
     background: var(--white);
     color: var(--text-strong);
@@ -76,7 +76,7 @@ const emit = defineEmits(["quit-session", "extend-session", "pointer-enter", "po
 }
 
 .timer {
-    margin-left: 0.75rem;
+    padding-left: 0.5rem;
     font-size: 1.5rem;
     font-weight: 600;
     color: var(--text);

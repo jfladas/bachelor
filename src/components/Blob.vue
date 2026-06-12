@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import BlobVisuals from "./BlobVisuals.vue";
 import RadialMenu from "./RadialMenu.vue";
 import MicroJournal from "./MicroJournal.vue";
@@ -56,6 +56,8 @@ const SLEEP_TAG_MAX_RATIO = 0.98;
 const POSITIVE_EMOTIONS = new Set(["excited", "content"]);
 const EMOTION_LIFETIME_MIN_HOURS = 1;
 const EMOTION_LIFETIME_MAX_HOURS = 24;
+const isPreparingPrint = ref(false);
+const showA4Preview = false;
 
 const baseHue = computed(() => clampHue(props.onboardingData?.hue, 220));
 const assignedHue = computed(() => clampHue(props.onboardingData?.assignedHue ?? baseHue.value, baseHue.value));
@@ -244,7 +246,7 @@ const sessionWrapUpRemainingMs = computed(() => {
 const sessionRemainingLabel = computed(() => formatSessionDuration(sessionRemainingMs.value));
 const sessionWrapUpRemainingLabel = computed(() => formatSessionDuration(sessionWrapUpRemainingMs.value));
 const showSessionBar = computed(() => sessionPhase.value === "active");
-const showSessionWrapUp = computed(() => sessionPhase.value === "wrap-up");
+const showSessionWrapUp = computed(() => sessionPhase.value === "wrap-up" && !isPreparingPrint.value && !isResettingSession.value);
 const canExtendSession = computed(() => sessionPhase.value === "active" && sessionRemainingMs.value > 0 && sessionRemainingMs.value < 60 * 1000);
 
 const armSessionEndTimer = () => {
@@ -361,10 +363,39 @@ const handleExtendSession = () => {
     armSessionEndTimer();
 };
 
-const handlePrintBlobSheet = () => {
-    if (typeof window !== "undefined" && typeof window.print === "function") {
-        window.print();
+const handlePrintBlobSheet = async () => {
+    if (isPreparingPrint.value || isResettingSession.value) {
+        return;
     }
+
+    isPreparingPrint.value = true;
+    await nextTick();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    if (typeof window !== "undefined" && window.electron?.ipcRenderer) {
+        try {
+            const result = await ipc.invoke("app:print-default");
+            if (!result?.success) {
+                console.error("Silent print failed:", result?.error || "Unknown error");
+            }
+            await performSessionReset();
+        } finally {
+            isPreparingPrint.value = false;
+        }
+        return;
+    }
+
+    if (typeof window !== "undefined" && typeof window.print === "function") {
+        try {
+            window.print();
+            await performSessionReset();
+        } finally {
+            isPreparingPrint.value = false;
+        }
+        return;
+    }
+
+    isPreparingPrint.value = false;
 };
 
 const handleSkipBlobSheet = () => {
@@ -1442,7 +1473,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div class="shell" :style="shellStyle">
+    <div class="shell" :class="{ 'printing-sheet-active': isPreparingPrint, 'a4-preview-shell': showA4Preview }"
+        :style="shellStyle">
         <SessionBar v-if="showSessionBar" :remaining-label="sessionRemainingLabel" :show-extend="canExtendSession"
             :is-sub-ten="sessionRemainingMs < 10000" :disabled="isResettingSession" @quit-session="handleQuitSession"
             @extend-session="handleExtendSession" @pointer-enter="handleSessionPointerEnter"
@@ -1519,7 +1551,7 @@ onBeforeUnmount(() => {
 
         <Transition name="overlay-fade" appear>
             <SessionEndWindow v-if="showSessionWrapUp" :remaining-label="sessionWrapUpRemainingLabel"
-                @print-sheet="handlePrintBlobSheet" @skip-printing="handleSkipBlobSheet"
+                :is-printing="isPreparingPrint" @print-sheet="handlePrintBlobSheet" @skip-printing="handleSkipBlobSheet"
                 @pointer-enter="handleSessionPointerEnter" @pointer-leave="handleSessionPointerLeave" />
         </Transition>
 
@@ -1661,9 +1693,46 @@ onBeforeUnmount(() => {
     display: none;
 }
 
+.shell.a4-preview-shell {
+    transform: scale(1) translateX(25%);
+    transform-origin: center;
+}
+
+.shell.a4-preview-shell .print-sheet {
+    display: block;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 210mm;
+    height: 297mm;
+    transform: translate(-50%, -50%);
+    overflow: hidden;
+    background: white;
+    box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.16);
+}
+
+.shell.a4-preview-shell .print-sheet,
+.print-sheet {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+.shell.printing-sheet-active .print-sheet {
+    display: block;
+    visibility: hidden;
+}
+
+.shell.printing-sheet-active :not(.print-sheet):not(.print-sheet *) {
+    display: none !important;
+}
+
 @media print {
     .print-sheet {
         display: block;
+    }
+
+    .shell.printing-sheet-active .print-sheet {
+        visibility: visible;
     }
 
     .shell :not(.print-sheet):not(.print-sheet *) {
