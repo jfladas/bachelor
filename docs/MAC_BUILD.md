@@ -13,7 +13,7 @@ npm ci
 2. (Optional) Generate `electron/assets/icon.icns` from your PNG source:
 
 ```bash
-sh scripts/generate_icns.sh electron/assets/icon256.png electron/assets/icon.icns
+sh scripts/generate_icns.sh electron/assets/iconcol256.png electron/assets/icon.icns
 ```
 
 3. Build renderer:

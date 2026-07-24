@@ -74,7 +74,7 @@ function setJournalUnlocked(nextUnlocked) {
 // server at localhost. This avoids relying on NODE_ENV which may not be set.
 const isDev = !app.isPackaged;
 const devServerUrl = "http://localhost:5173";
-const appIconPath = path.join(__dirname, "assets", process.platform === "win32" ? "icon.ico" : "icon.png");
+const appIconPath = path.join(__dirname, "assets", process.platform === "win32" ? "iconcol.ico" : "icon.png");
 const onboardingStatePath = path.join(app.getPath('userData'), 'onboarding-state.json');
 const onboardingDefaults = {
     completed: false,

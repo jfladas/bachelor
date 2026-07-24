@@ -1,7 +1,7 @@
 {
   "name": "amorphous-blob",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Desktop presence app built with Vue, Vite, Electron, and Matter.js.",
   "author": "jfladas",
   "type": "module",
@@ -45,7 +45,7 @@
         "nsis",
         "appx"
       ],
-      "icon": "electron/assets/icon.ico"
+      "icon": "electron/assets/iconcol.ico"
     },
     "appx": {
       "identityName": "jfladas.AmorphousBlob",
@@ -62,9 +62,6 @@
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
-      "additionalArguments": [
-        "--verbose=4"
-      ],
       "icon": "electron/assets/icon.icns"
     },
     "nsis": {
@@ -72,8 +69,8 @@
       "perMachine": false,
       "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "electron/assets/icon.ico",
-      "uninstallerIcon": "electron/assets/icon.ico"
+      "installerIcon": "electron/assets/iconcol.ico",
+      "uninstallerIcon": "electron/assets/iconcol.ico"
     }
   }
 }
